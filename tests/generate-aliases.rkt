@@ -18,7 +18,7 @@
          racket/port
          racket/runtime-path
          ffi/unsafe
-         vulkan/unsafe)
+         vulkan/manual)
 
 (define-runtime-path here ".")
 (define project-root (simplify-path (build-path here "..")))

@@ -67,9 +67,10 @@ registry/*.xml ──(generate.rkt)──▶ generated/{constants,types,commands
                      │                                                │
                      ├──────────────┬─────────────────────────────────┘
                      ▼              ▼
-            vulkan/unsafe.rkt   vulkan/safe.rkt
-            （兼容 = bindings    （组合层糖：check-vk-result +
-              + memory）           vk-create-*，不 re-export 裸命令）
+            vulkan/manual.rkt   vulkan/safe.rkt
+            （手动 = bindings    （组合层：support（错误/枚举）+ callback /
+              + memory；           pnext / capability + vk-create-* 糖；
+               unsafe = 别名）      不 re-export 裸命令）
                      │              │
                      └──────┬───────┘
                             ▼
@@ -83,9 +84,16 @@ registry/*.xml ──(generate.rkt)──▶ generated/{constants,types,commands
 | `vulkan/commands` | 原始命令（返回 `VkResult`） | 策略、所有权 |
 | `vulkan/bindings` / `vulkan/raw` | 原始表面 = base + commands | arena、错误抛出、create 包装 |
 | `vulkan/memory` | arena、`vk-malloc`/`stable-bytes`/`vk-new`、handle↔arena 绑定 | 任何 Vulkan 类型/命令 |
+| `vulkan/support` | `check-vk-result` + `vk-enumerate-result`/`-void`（错误/枚举支撑） | 包装、所有权 |
+| `vulkan/callback` | 回调令牌：稳定 `_cprocedure` 指针 + 保活 | 分配器实现、驱动回调策略 |
+| `vulkan/pnext` | pNext/sType 糖（`vk-struct` / `vk-chain!`） | 驱动的链校验策略 |
+| `vulkan/capability` | 扩展枚举与可用性（instance/device）+ `vk-proc-available?` | 降级策略 |
+| `vulkan/map` | 设备内存映射薄封装（`vk-map` / `vk-unmap`） | GC 接管、所有权 |
+| `vulkan/manual` | 手动模式 = `bindings` + `memory`（裸命令 + arena） | 错误策略、create 包装 |
+| `vulkan/unsafe` | 已弃用别名（= `vulkan/manual`） | — |
 | `vulkan/safe` | `check-vk-result` + `vk-create-*`/`vk-destroy-*` | 裸命令（靠模块隔离区分） |
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） | 生成逻辑、策略 |
-| `vulkan/gen/*` | 生成器内部：`classify`（shape+plan）/ `emit`（逐形状） | 运行期依赖 |
+| `vulkan/generator/*` | 生成器：`registry`（读 XML + 闭包）/ `extensions`（common/all）/ `constants` / `ctype` / `facts-build` / `emit-*` / `classify`+`emit` | 运行期依赖 |
 | `vulkan`（main） | facade：挑选/重命名导出 | 逻辑 |
 
 依赖方向单向、无环。
@@ -137,6 +145,15 @@ registry/*.xml ──(generate.rkt)──▶ generated/{constants,types,commands
 | 运行期 IR | `vulkan/gen/facts.rkt` | `vulkan/api-facts.rkt` |
 | 事实列表 | `vk-api` | `vk-command-facts` |
 | 调用作用域 | `with-vk-call`（memory） | `with-vk-call`（safe，策略别名） |
+| dispatch 上下文 | `register-vk-instance!` / `register-vk-device!` | `vk-use-instance!` / `vk-use-device!` |
+| 当前上下文参数 | `current-instance` / `current-device` | `current-vk-instance` / `current-vk-device` |
+| 分派缓存 | `proc-cache` / `vk-invalidate-cache!` | `vk-proc-cache` / `vk-proc-cache-clear!` |
+| 符号解析 | `vk-symbol` / `vk-resolve` | `vk-lib-symbol` / `vk-resolve-proc` |
+| 手动入口 | `vulkan/unsafe` | `vulkan/manual`（`unsafe` 保留为弃用别名） |
+| 窗口句柄 | `glfw-window-ptr` | `glfw-window-handle` |
+| 创建 surface | `glfw-window-create-surface` | `glfw-create-vk-surface` |
+| 原生句柄 | `glfw-window-x11` / `glfw-window-wayland` | `glfw-window-x11-handles` / `glfw-window-wayland-handles` |
+| 测试文件 | `tests/arena-test.rkt` | `tests/memory-arena.rkt` |
 
 **分层的判据**：只做计算/按 arena 管引用（Vulkan 无关）的留在原语层；
 替用户选“用哪个作用域/怎么报错”的属于组合层。`with-vk-frame` 是纯 arena 机制，留
@@ -150,6 +167,7 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 |------|:----:|:----:|------|
 | 常量 / ctype / 布局 / alias / 分派级别 | ✅ | | bindings |
 | 命令签名 | ✅ | | bindings |
+| funcpointer ctype（`_PFN_*` → `_cprocedure`） | ✅ | | bindings |
 | platform 类型表、basetype 映射 | | ✅（生成器输入） | bindings |
 | version 宏、libvulkan、GIPA/GDPA | | ✅ | bindings |
 | VkResult 名字表（纯数据） | | ✅ | bindings |
@@ -197,20 +215,20 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 - **B2**：**无返回句柄的调用不受保护**（`vkQueueSubmit`、`vkCmd*`、`vkUpdate*`、
   `vkMapMemory`、`vkEnumerate*`）。若这些调用存在**异步保留 host 指针**的情形
   （扩展/驱动特有），当前模型不足。**触发**：确认某个扩展在提交后异步读 host 内存。
-- **B3**：`pNext` 链只要整链都用登记的分配器就安全；若用未登记的 `make-VkX`，
-  不受保护。目前靠 builder 约定，**没有静态强制**。
+- **B3**：`pNext` 链用 `vk-chain!` 串接时会把各节点登记到当前 arena（自动保活）；
+  `vk-struct` 自动填 `sType`。手工 `set-VkX-pNext!` 仍不强制。
   **触发**：出现难以排查的悬空 `pNext` → 考虑在 `make-VkX` 层面强制登记。
 - **B4**：arena 生命周期 = 对象生命周期，**可能严重过度保留**。
   典型反例：长寿命 command buffer / descriptor set 反复用 `vk-new` 传入每帧数据，
   arena 无界增长。**触发**：出现按帧分配 → 需要「帧 arena / 显式 reset」。
 
 ### C. 回调（funcpointer）
-- **C1**：当前 `_PFN_*` 一律 `_pointer`，**不能**用 Racket 过程回调
-  （`VkAllocationCallbacks`、debug messenger 不可用）。
-  实现回调需要：调用点 `_cprocedure` 包装 + 回调 trampoline 保活（`#:keep`）+
-  生命周期超出单次调用。**这与 arena 模型正交**，需要独立的 callback registry。
-- **C2**：回调可能在任意/驱动线程触发，而 `current-vk-arena` 是 thread-local，
-  在回调线程里无效。**触发**：实现回调 → 必须显式传上下文，不能依赖动态参数。
+- **C1**：`_PFN_*` 现在是 `_cprocedure`（可作参数/转换）；**结构体里的函数指针字段仍是
+  `_pointer`**。用 `vulkan/callback` 的 `make-vk-callback` / `vk-callback-keep!` 只转换一次
+  得到稳定指针，并把令牌登记进对象 arena。注意 `_cprocedure` 默认保活是**弱表**
+  （按 Racket 过程可达），且同一过程重复转换会被覆盖 → 必须持有令牌。
+- **C2**：回调可能在任意/驱动线程触发，`current-vk-arena` 是 thread-local，回调内无效。
+  上下文用闭包捕获或 `pUserData`。
 
 ### D. 线程
 - **D1**：`vk-handle-arenas` 是全局 `make-hash`，**无锁**。多线程并发创建对象会竞争。
@@ -224,14 +242,18 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
   可能 stale/误命中。**触发**：出现句柄地址复用问题 → 换带世代号的句柄包装。
 
 ### F. 错误 / 版本
-- **F1**：命令在首次调用时经 GIPA/GDPA 解析，未加载扩展通常解析失败并抛错；
-  **没有运行期 capability 门控**。**触发**：需要按扩展/版本优雅降级。
+- **F1**：命令不可用时抛 `exn:fail:vulkan:unavailable`（可捕获）；`vk-proc-available?`
+  可预检；`vulkan/capability` 枚举 instance/device 扩展并判断可用性。
+  按版本降级仍需调用方判断（`vkEnumerateInstanceVersion` / 设备 `apiVersion`）。
 - **F2**：`check-vk-result` 只对负值抛错，`VK_INCOMPLETE`/`VK_TIMEOUT` 等由调用方处理。
 
 ### G. 生成
-- **G1**：alias 已解析；**bitfield 目前被丢弃**（当前 10 个扩展未触发），
-  一旦纳入 NV/acceleration 扩展会布局错误。**触发**：扩展覆盖 → 先修 bitfield。
-- **G2**：未识别类型静默降级 `_pointer`，可能悄悄错 ABI。**触发**：加平台扩展前先审计。
+- **G1**：alias 已解析；**bitfield 已按存储单元打包**成底层整型字段（`_bitsN`），
+  并生成掩码/移位访问器（`VkX-<field>` / `set-VkX-<field>!`）；**多维数组保留全部维度**
+  （`float matrix[3][4]` → `(_array _float 3 4)`）。由 `tests/bitfield.rkt` 锁定。
+- **G2**：未识别类型不再静默：`ctype-of-type-name` 记录到 `generated/unknown-types.txt`，
+  可用 `VULKAN_GEN_STRICT=1` 报错。当前 `common` 与 `all` 均 **0 未知类型**
+  （Win32 / DirectFB / NvSci / StdVideo 等外部类型已映射进 `platform-ctype`）。
 
 ---
 
@@ -312,8 +334,7 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 ### 6.7 待定
 
 - `vk-arena-reset!` 后旧引用失效的语义（文档/断言）。
-- `vk-map` / `vk-unmap` 是否本轮做。
-- callback registry（M3.5）与 arena 的上下文传递方式。
+- 回调上下文与 arena 的传递方式（现：闭包/`pUserData`，见 §6.11）。
 
 ### 6.8 M3.2 自动层设计（分类 / 约定 / 边界）
 
@@ -418,19 +439,25 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 把生成逻辑拆成可独立测试的局部片段，最后组合（避免一个巨型 `cond`）：
 
 ```
-api facts ──classify──▶ (shape . plan) ──emit-<shape>──▶ forms ──compose──▶ safe.inc
+XML ─registry─▶ facts-build ─▶ vk-command ─classify─▶ (shape . plan)
+                                         ─emit-<shape>─▶ forms ─compose─▶ safe.inc
 ```
+
+模块：`xexpr`（XML 工具）/ `registry`（读 XML + feature/extension 闭包）/
+`constants`（常量）/ `ctype`（类型映射 + 成员）/ `facts-build`（XML→IR）/
+`emit-types`、`emit-commands`（types/commands/api 产出）/ `classify`+`emit`（safe）。
+`generate.rkt` 只做参数解析、wanted 闭包、拓扑排序与写文件。
 
 **1) 分类（纯函数）**：`(classify cmd) -> (values shape plan)`。
 固定枚举的 shape（固定签名匹配，按表顺序先到先得）：
 
 | shape | 条件 |
 |-------|------|
-| `create/single` | `^vkCreate/Allocate`，单句柄输出，显式 count |
-| `create/array` | `^vkCreate`，显式 count + 句柄数组输出 |
-| `create/info-count` | `^vkAllocate`，count 在 info 结构体里 |
-| `destroy/single` | `^vkDestroy/Free`，单句柄 |
-| `destroy/array` | `^vkFree`，count + 句柄数组 |
+| `make-handle` | `^vkCreate` 单句柄输出；或 `^vkAllocate` 无 count 字段 |
+| `make-handles` | `^vkCreate`，显式 count + 句柄数组输出 |
+| `make-handles-info-count` | `^vkAllocate`，count 在 info 结构体里 |
+| `destroy-handle` | `^vkDestroy` / `^vkFree`，单句柄 |
+| `destroy-handles` | `^vkFree`，count + 句柄数组 |
 | `out/single` | `|outs|=1` 无 count，输入仅 char |
 | `out/array` | `|outs|=1`，`|counts|=1`，输入仅 char |
 | `in/single` | `|outs|=0`，一个输入 struct 指针，无 count |
@@ -444,7 +471,7 @@ api facts ──classify──▶ (shape . plan) ──emit-<shape>──▶ for
       output count input count-info-field)
 ```
 
-**3) 逐形状 emitter**：`emit-create-single` / `emit-out-array` … 每个只吃 plan，互不引用；
+**3) 逐形状 emitter**：`emit-make-handle` / `emit-out-array` … 每个只吃 plan，互不引用；
 共享小工具（`checked-call` 等）保持独立。
 
 **4) 组合 driver**：按 `wanted-cmds` 顺序 classify → 查 emitter 表 → 收集 forms。
@@ -458,6 +485,66 @@ api facts ──classify──▶ (shape . plan) ──emit-<shape>──▶ for
 - 每个 non-skip shape 至少有一个真实命令（防止 emitter 变成死代码）；
 - `skip` 的原因可列举（多输出/多输入/char 输出等）。
 
+### 6.10 位域与多维数组（布局事实）
+
+Racket `define-cstruct` 不支持 C 位域，所以**一个存储单元打成一个底层整型字段**：
+
+- `ctype.rkt` 的 `struct-layout` 扫描成员，把连续位域（同宽、不溢出单元）归并成
+  一个 `_uint32`/`_uint64` 字段，名为 `_bits0`、`_bits1`…（不冒充真实成员），
+  记录每位的 `(offset width)`；`reserved` 只占位。
+- `emit-types.rkt` 在每个具名位域上生成 getter `VkX-<field>`（掩码+移位）与
+  setter `set-VkX-<field>!`（读改写）。
+- 多维数组用 `(_array ctype dim ...)`（如 `float matrix[3][4]` → `(_array _float 3 4)`）。
+
+例：`VkAccelerationStructureInstanceKHR` →
+`((transform _VkTransformMatrixKHR) (_bits0 _uint32) (_bits1 _uint32)
+(accelerationStructureReference _uint64))`，`sizeof=64 / align=8`，由 `tests/bitfield.rkt`
+对照 gcc 锁定。
+
+### 6.11 回调（`vulkan/callback`）
+
+`_PFN_*` 生成为 `_cprocedure`；结构体里的函数指针字段保持 `_pointer`，避免
+“同一 Racket 过程重复转换 → trampoline 被弱表覆盖”的悬空。
+
+```racket
+(vk-new make-VkDebugUtilsMessengerCreateInfoEXT
+        VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
+        #f 0 severity types
+        (vk-callback-keep! _PFN_vkDebugUtilsMessengerCallbackEXT proc) ; -> 稳定 _pointer
+        #f)                                                             ; pUserData
+```
+
+- `make-vk-callback`：转换一次得到稳定指针，令牌强引用 Racket 过程（保活 trampoline）。
+- `vk-callback-keep!`：建令牌 + 登记当前 arena（builder 内用 → 绑到返回对象生命周期）+ 返回指针。
+- `vk-callback-release!`：放弃保活（调用方保证 C 侧不再引用）。
+- 回调线程不继承动态参数，上下文用闭包或 `pUserData`。
+
+### 6.12 pNext / sType（`vulkan/pnext`）
+
+生成 `generated/pnext.inc` 两张表：`vk-struct-sType`（struct 名 → sType 值）与
+`vk-pNext-setters`（sType 值 → `set-VkX-pNext!`）。
+
+```racket
+;; 自动 sType + pNext=#f，并登记到当前 arena
+(define ici (vk-struct make-VkInstanceCreateInfo 0 #f 0 #f 0 #f))
+(define dbg (vk-struct make-VkDebugUtilsMessengerCreateInfoEXT 0 sev types #f #f))
+;; 串链 ici -> dbg；按每个节点的 sType 查 setter，并把节点登记到 arena（B3）
+(vk-chain! ici dbg)
+```
+
+只覆盖“干净形状”（首成员 `sType`、次成员 `pNext`）；裸 `set-VkX-pNext!` 仍可用。
+
+### 6.13 能力查询与降级（`vulkan/capability`）
+
+- `vk-proc-available?`（base）：命令在当前上下文能否解析，不抛异常。
+- `vk-instance-extension-properties` / `vk-device-extension-properties`：扩展名列表。
+- `vk-instance-extension-available?` / `vk-device-extension-available?`：成员判断。
+- 命令不可用时 `define-vk` 抛 **`exn:fail:vulkan:unavailable`**（带 `command` 字段）：
+  ```racket
+  (with-handlers ([exn:fail:vulkan:unavailable? (λ (e) ...fallback...)])
+    (vkSomeExtensionCommand ...))
+  ```
+
 ---
 
 ## 7. 路线图
@@ -467,14 +554,20 @@ api facts ──classify──▶ (shape . plan) ──emit-<shape>──▶ for
 | M1 ✅ | 模块拆分 bindings / memory / unsafe / safe | 全部 |
 | M2 ✅ | base 去 policy，原始命令返回 VkResult | bindings + safe |
 | M3.0 ✅ | `generated/api.rkt` 命令/参数事实层（无行为变化） | bindings 产出 |
-| M3.G ✅ | 生成器拆分为 `vulkan/gen/`（classify/emit 流水线），IR 移到运行期 `vulkan/api-facts` | generate |
+| M3.G ✅ | 生成器拆分为 `vulkan/generator/`（classify/emit 流水线），IR 移到运行期 `vulkan/api-facts` | generate |
 | M3.1 ✅ | 原语扩展：`vk-arena-reset!` / `vk-arena-keep!` / `with-vk-frame` | memory |
 | M3.2a ✅ | 单输出糖（`vkGet*` struct/handle/scalar） | safe |
 | M3.2b ✅ | 数组输出糖（enumerate + `VK_INCOMPLETE` 重试） | safe |
 | M3.2c ✅ | 输入类糖（数组 + 调用作用域；flat 限制） | safe |
 | M3.2d ✅ | `with-vk-call`（序列共享调用作用域） | safe |
-| M3.5 | funcpointer 回调 + callback registry | safe |
+| M3.5 ✅ | funcpointer `_cprocedure` + `vulkan/callback` 令牌（稳定指针 + arena 保活） | safe + generate |
+| M3.3 ✅ | 设备内存映射 `vk-map` / `vk-unmap`（薄封装，不归 GC） | safe |
 | M4 ✅ | C 程序 `sizeof`/`alignof` ABI 对照（335 个 core struct/union） | tests |
-| D6 | pNext/sType 辅助 | safe |
+| G1 ✅ | bitfield 存储单元打包 + 多维数组（`_array` 多维 + 访问器生成） | generate |
+| E1/E3 ✅ | 扩展选择 `common`/`all` + 未知类型审计（bitfield/multi-dim 前置已修） | generate |
+| F1 ✅ | capability 门控：`vk-proc-available?` + 扩展枚举 + 可捕获的 unavailable 异常 | safe + base |
+| D6 ✅ | pNext/sType 糖：`vk-struct` / `vk-chain!` + 生成 `pnext.inc` | safe + generate |
 | E1/E3 | 扩展覆盖 + bitfield（G1） | generate |
-| N1 ✅ | 命名收敛（词表 + 分层回归）：§2.2；IR 出 `gen/`、策略归 safe、枚举去伪结果 | 全部 |
+| N1 ✅ | 命名收敛（词表 + 分层回归）：§2.2；IR 出 `generator/`、策略归 safe、枚举去伪结果 | 全部 |
+| N2 ✅ | 公开名收敛（`vk-use-*`/`current-vk-*`/`manual`/window）+ `gen/`→`generator/` + shape 词表 | 全部 |
+| N3 ✅ | `generate.rkt` 拆为 registry/constants/ctype/facts-build/emit-types/emit-commands（输出逐字节不变） | generate |

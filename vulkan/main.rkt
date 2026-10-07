@@ -16,5 +16,5 @@
 (require "safe.rkt"
          (prefix-in raw: "commands.rkt"))
 
-(provide (all-from-out "safe.rkt")      ; 糖 + base(类型/常量) + memory(原子)
+(provide (all-from-out "safe.rkt")      ; 糖 + base(类型/常量) + memory + support/callback/pnext/capability
          (all-from-out "commands.rkt")) ; 导入时已带 raw: 前缀，故导出 raw:*

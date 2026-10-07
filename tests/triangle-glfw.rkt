@@ -42,11 +42,11 @@
      (vk-new make-VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
              #f 0 app 0 #f (length required-exts) ext-arr))
    #f))
-(void (register-vk-instance! instance))
+(void (vk-use-instance! instance))
 (printf "[ok] instance (exts: ~a)\n" required-exts)
 
 ;; ---------- surface（GLFW 直接创建，跨平台）----------
-(define surface (cast (glfw-window-create-surface win instance) _pointer _VkSurfaceKHR))
+(define surface (cast (glfw-create-vk-surface win instance) _pointer _VkSurfaceKHR))
 (printf "[ok] surface\n")
 
 ;; ---------- physical device + queue family ----------
@@ -91,7 +91,7 @@
      (vk-new make-VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
              #f 0 1 qci 0 #f 1 arr #f))
    #f))
-(void (register-vk-device! device))
+(void (vk-use-device! device))
 (define queue (let () (define p (vk-malloc _VkQueue))
                 (raw:vkGetDeviceQueue device queue-family-index 0 p) (ptr-ref p _VkQueue)))
 (printf "[ok] device + queue (family ~a)\n" queue-family-index)

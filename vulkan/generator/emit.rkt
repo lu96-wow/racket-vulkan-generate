@@ -57,7 +57,7 @@
 
 ;; ---------------- create / allocate ----------------
 
-(define (emit-create-array plan)
+(define (emit-make-handles plan)
   (define wname (cmd-name plan))
   (define info-ctype (vk-param-ctype (vk-plan-input plan)))
   (define out-ctype (vk-param-ctype (vk-plan-output plan)))
@@ -74,7 +74,7 @@
      (for ([h hs]) (vk-handle-arena-set! h a))
      ,(if (vk-plan-result? plan) '(values r hs) 'hs)))
 
-(define (emit-create-info-count plan)
+(define (emit-make-handles-info-count plan)
   (define wname (cmd-name plan))
   (define info-base (vk-param-base (vk-plan-input plan)))
   (define out-ctype (vk-param-ctype (vk-plan-output plan)))
@@ -91,7 +91,7 @@
      (for ([h hs]) (vk-handle-arena-set! h a))
      ,(if (vk-plan-result? plan) '(values r hs) 'hs)))
 
-(define (emit-create-single plan)
+(define (emit-make-handle plan)
   (define wname (cmd-name plan))
   (define out-ctype (vk-param-ctype (vk-plan-output plan)))
   `(define (,wname ,@(builder-args plan))
@@ -107,14 +107,14 @@
 
 ;; ---------------- destroy / free ----------------
 
-(define (emit-destroy-single plan)
+(define (emit-destroy-handle plan)
   (define wname (cmd-name plan))
   (define h (pname (vk-plan-output plan)))
   `(define (,wname ,@(all-args plan))
      (vk-handle-arena-remove! ,h)
      ,(call-expr plan (all-args plan))))
 
-(define (emit-destroy-array plan)
+(define (emit-destroy-handles plan)
   (define wname (cmd-name plan))
   (define cnt (pname (vk-plan-count plan)))
   (define arr (pname (vk-plan-output plan)))
@@ -184,11 +184,11 @@
 ;; ---------------- 组合 ----------------
 
 (define emitters
-  (hash 'create-single emit-create-single
-        'create-array emit-create-array
-        'create-info-count emit-create-info-count
-        'destroy-single emit-destroy-single
-        'destroy-array emit-destroy-array
+  (hash 'make-handle emit-make-handle
+        'make-handles emit-make-handles
+        'make-handles-info-count emit-make-handles-info-count
+        'destroy-handle emit-destroy-handle
+        'destroy-handles emit-destroy-handles
         'out-single emit-out-single
         'out-array emit-out-array
         'in-single emit-in-single
@@ -196,8 +196,8 @@
 
 ;; 分组只到“类别”，组内保持命令原序，复现旧产物顺序
 (define (shape-category s)
-  (cond [(memq s '(create-single create-array create-info-count)) 'create]
-        [(memq s '(destroy-single destroy-array)) 'destroy]
+  (cond [(memq s '(make-handle make-handles make-handles-info-count)) 'create]
+        [(memq s '(destroy-handle destroy-handles)) 'destroy]
         [(memq s '(out-single out-array)) 'out]
         [(memq s '(in-single in-array)) 'in]
         [else 'skip]))

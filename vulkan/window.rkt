@@ -6,7 +6,7 @@
 ;; 用途（开发期）：
 ;;   (glfw-init!)
 ;;   (define win (make-glfw-window #:width 800 #:height 600 #:title "demo"))
-;;   (define surface (glfw-window-create-surface win instance))   ; raw VkSurfaceKHR
+;;   (define surface (glfw-create-vk-surface win instance))   ; raw VkSurfaceKHR
 ;;   (let loop ()
 ;;     (glfw-window-poll! win)
 ;;     (unless (glfw-window-should-close? win)
@@ -24,7 +24,7 @@
          glfw-terminate!
          glfw-window?
          make-glfw-window
-         glfw-window-ptr
+         glfw-window-handle
          glfw-window-framebuffer-size
          glfw-window-size
          glfw-window-should-close?
@@ -34,9 +34,9 @@
          glfw-window-set-title!
          glfw-window-destroy!
          glfw-window-platform
-         glfw-window-x11
-         glfw-window-wayland
-         glfw-window-create-surface
+         glfw-window-x11-handles
+         glfw-window-wayland-handles
+         glfw-create-vk-surface
          glfw-required-instance-extensions
          glfw-error-message)
 
@@ -84,7 +84,7 @@
 (define-glfw glfwGetWaylandWindow (_fun _pointer -> _pointer))
 
 ;; ------------------------------------------------------------------
-(struct glfw-window (ptr) #:transparent #:mutable)
+(struct glfw-window (handle) #:transparent #:mutable)
 
 (define (glfw-error-message)
   (define-values (code msg) (glfwGetError))
@@ -111,55 +111,55 @@
 (define (glfw-window-framebuffer-size w)
   (define a (malloc 'atomic-interior _int))
   (define b (malloc 'atomic-interior _int))
-  (glfwGetFramebufferSize (glfw-window-ptr w) a b)
+  (glfwGetFramebufferSize (glfw-window-handle w) a b)
   (values (ptr-ref a _int) (ptr-ref b _int)))
 
 (define (glfw-window-size w)
   (define a (malloc 'atomic-interior _int))
   (define b (malloc 'atomic-interior _int))
-  (glfwGetWindowSize (glfw-window-ptr w) a b)
+  (glfwGetWindowSize (glfw-window-handle w) a b)
   (values (ptr-ref a _int) (ptr-ref b _int)))
 
 (define (glfw-window-should-close? w)
-  (not (zero? (glfwWindowShouldClose (glfw-window-ptr w)))))
+  (not (zero? (glfwWindowShouldClose (glfw-window-handle w)))))
 
 (define (glfw-window-set-should-close! w v)
-  (glfwSetWindowShouldClose (glfw-window-ptr w) (if v GLFW_TRUE GLFW_FALSE)))
+  (glfwSetWindowShouldClose (glfw-window-handle w) (if v GLFW_TRUE GLFW_FALSE)))
 
 (define (glfw-window-poll! w)
   (glfwPollEvents)
-  (when (and w (= (glfwGetKey (glfw-window-ptr w) GLFW_KEY_ESCAPE) GLFW_PRESS))
+  (when (and w (= (glfwGetKey (glfw-window-handle w) GLFW_KEY_ESCAPE) GLFW_PRESS))
     (glfw-window-set-should-close! w #t)))
 
 (define (glfw-window-wait! w) (glfwWaitEvents))
 
 (define (glfw-window-set-title! w title)
-  (glfwSetWindowTitle (glfw-window-ptr w) title))
+  (glfwSetWindowTitle (glfw-window-handle w) title))
 
 (define (glfw-window-destroy! w)
-  (glfwDestroyWindow (glfw-window-ptr w))
-  (set-glfw-window-ptr! w #f))
+  (glfwDestroyWindow (glfw-window-handle w))
+  (set-glfw-window-handle! w #f))
 
 (define (glfw-window-platform)
   (cond [(glfwGetX11Display) 'x11]
         [(glfwGetWaylandDisplay) 'wayland]
         [else 'other]))
 
-(define (glfw-window-x11 w)
+(define (glfw-window-x11-handles w)
   ;; -> (values Display* Window)  （仅 X11 平台）
-  (values (glfwGetX11Display) (glfwGetX11Window (glfw-window-ptr w))))
+  (values (glfwGetX11Display) (glfwGetX11Window (glfw-window-handle w))))
 
-(define (glfw-window-wayland w)
+(define (glfw-window-wayland-handles w)
   ;; -> (values wl_display* wl_surface*)  （仅 Wayland 平台）
-  (values (glfwGetWaylandDisplay) (glfwGetWaylandWindow (glfw-window-ptr w))))
+  (values (glfwGetWaylandDisplay) (glfwGetWaylandWindow (glfw-window-handle w))))
 
 ;; 创建 VkSurfaceKHR：instance 传原始句柄，返回原始句柄（cpointer）。
 ;; 调用方再用 (cast p _pointer _VkSurfaceKHR) 变成绑定里的类型。
-(define (glfw-window-create-surface w instance)
+(define (glfw-create-vk-surface w instance)
   (define out (malloc 'atomic-interior _pointer))
-  (define rc (glfwCreateWindowSurface instance (glfw-window-ptr w) #f out))
+  (define rc (glfwCreateWindowSurface instance (glfw-window-handle w) #f out))
   (unless (zero? rc)
-    (error 'glfw-window-create-surface "glfwCreateWindowSurface failed (VkResult ~a)" rc))
+    (error 'glfw-create-vk-surface "glfwCreateWindowSurface failed (VkResult ~a)" rc))
   (ptr-ref out _pointer))
 
 ;; GLFW 需要的 VkInstance 扩展名（如 VK_KHR_surface + VK_KHR_xlib_surface）

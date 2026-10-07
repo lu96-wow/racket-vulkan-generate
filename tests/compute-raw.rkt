@@ -6,9 +6,9 @@
 ;; 与新绑定的差异：
 ;;   * enum/bitmask 用整数常量（不再是符号）
 ;;   * 命令经 global/instance/device 分派表加载
-;;   * 需要 register-vk-instance! / register-vk-device!
+;;   * 需要 vk-use-instance! / vk-use-device!
 ;; ============================================================
-(require vulkan/unsafe
+(require vulkan/manual
          ffi/unsafe
          racket/port
          racket/file
@@ -40,7 +40,7 @@
   (create _VkInstance (λ (p) (vkCreateInstance ici #f p))))
 
 (define instance (make-instance))
-(void (register-vk-instance! instance))
+(void (vk-use-instance! instance))
 (printf "[ok] instance = ~a\n" instance)
 
 ;; ---------- physical device ----------
@@ -85,7 +85,7 @@
   (create _VkDevice (λ (p) (vkCreateDevice physical-device dci #f p))))
 
 (define device (make-logical-device))
-(void (register-vk-device! device))
+(void (vk-use-device! device))
 (printf "[ok] device = ~a\n" device)
 
 (define queue (let ()

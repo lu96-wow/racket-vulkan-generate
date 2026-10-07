@@ -19,7 +19,7 @@
                  VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO #f 0 #f 0 #f 0 #f))
    #f))
 (check-equal? ri VK_SUCCESS)
-(void (register-vk-instance! instance))
+(void (vk-use-instance! instance))
 
 ;; ---------- 单输出（VkResult，scalar）----------
 (define-values (rv ver) (vkEnumerateInstanceVersion))

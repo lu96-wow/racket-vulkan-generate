@@ -33,7 +33,7 @@
      (vk-new make-VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
              #f 0 app 0 #f 0 #f))
    #f))
-(void (register-vk-instance! instance))
+(void (vk-use-instance! instance))
 (printf "[ok] instance = ~a\n" instance)
 
 ;; ---------- physical device / queue family ----------
@@ -75,7 +75,7 @@
      (vk-new make-VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
              #f 0 1 qci 0 #f 0 #f #f))
    #f))
-(void (register-vk-device! device))
+(void (vk-use-device! device))
 (printf "[ok] device = ~a\n" device)
 
 (define queue

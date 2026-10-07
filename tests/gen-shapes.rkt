@@ -5,7 +5,7 @@
 
 (require rackunit
          racket/list
-         vulkan/gen/classify
+         vulkan/generator/classify
          vulkan/generated/api)
 
 (define (find-cmd name)
@@ -17,14 +17,14 @@
   (vk-plan-shape (classify-command c)))
 
 ;; 代表性命令落位
-(check-equal? (shape-of 'vkCreateBuffer) 'create-single)
-(check-equal? (shape-of 'vkCreateGraphicsPipelines) 'create-array)
-(check-equal? (shape-of 'vkAllocateCommandBuffers) 'create-info-count)
-(check-equal? (shape-of 'vkAllocateDescriptorSets) 'create-info-count)
-(check-equal? (shape-of 'vkAllocateMemory) 'create-single)
-(check-equal? (shape-of 'vkDestroyBuffer) 'destroy-single)
-(check-equal? (shape-of 'vkFreeCommandBuffers) 'destroy-array)
-(check-equal? (shape-of 'vkFreeDescriptorSets) 'destroy-array)
+(check-equal? (shape-of 'vkCreateBuffer) 'make-handle)
+(check-equal? (shape-of 'vkCreateGraphicsPipelines) 'make-handles)
+(check-equal? (shape-of 'vkAllocateCommandBuffers) 'make-handles-info-count)
+(check-equal? (shape-of 'vkAllocateDescriptorSets) 'make-handles-info-count)
+(check-equal? (shape-of 'vkAllocateMemory) 'make-handle)
+(check-equal? (shape-of 'vkDestroyBuffer) 'destroy-handle)
+(check-equal? (shape-of 'vkFreeCommandBuffers) 'destroy-handles)
+(check-equal? (shape-of 'vkFreeDescriptorSets) 'destroy-handles)
 (check-equal? (shape-of 'vkGetPhysicalDeviceProperties) 'out-single)
 (check-equal? (shape-of 'vkEnumeratePhysicalDevices) 'out-array)
 (check-equal? (shape-of 'vkGetPhysicalDeviceQueueFamilyProperties) 'out-array)

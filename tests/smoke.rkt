@@ -1,5 +1,5 @@
 #lang racket/base
-(require vulkan/unsafe ffi/unsafe racket/sequence)
+(require vulkan/manual ffi/unsafe racket/sequence)
 
 (printf "VK_HEADER_VERSION = ~a\n" VK_HEADER_VERSION)
 (printf "ctype-sizeof _VkApplicationInfo = ~a\n" (ctype-sizeof _VkApplicationInfo))
@@ -11,7 +11,7 @@
 (vkCreateInstance ici #f inst-ptr)
 (define inst (ptr-ref inst-ptr _VkInstance))
 (printf "instance = ~a\n" inst)
-(register-vk-instance! inst)
+(vk-use-instance! inst)
 
 ;; 2. 枚举物理设备
 (define cnt (malloc _uint32))

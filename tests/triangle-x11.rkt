@@ -77,7 +77,7 @@
      (vk-new make-VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
              #f 0 app 0 #f (length x11-exts) ext-arr))
    #f))
-(register-vk-instance! instance)
+(vk-use-instance! instance)
 (printf "[ok] instance\n")
 
 (define-values (r2 surface)
@@ -130,7 +130,7 @@
      (vk-new make-VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
              #f 0 1 qci 0 #f 1 arr #f))
    #f))
-(register-vk-device! device)
+(vk-use-device! device)
 (printf "[ok] device\n")
 
 (define queue

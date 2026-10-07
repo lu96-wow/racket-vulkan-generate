@@ -28,7 +28,7 @@
      (vk-new make-VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
              #f 0 app 0 #f (length x11-exts) ext-arr))
    #f))
-(register-vk-instance! instance)
+(vk-use-instance! instance)
 (printf "[ok] instance = ~a\n" instance)
 
 (define physical-device
@@ -122,7 +122,7 @@
         (vk-new make-VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
                 #f 0 1 qci 0 #f (length dev-exts) dev-ext-arr #f))
       #f))
-   (register-vk-device! device)
+   (vk-use-device! device)
    (printf "[ok] device = ~a\n" device)
 
    (define extent (VkSurfaceCapabilitiesKHR-currentExtent caps))

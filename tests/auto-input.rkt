@@ -18,7 +18,7 @@
    (λ () (vk-new make-VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
                  #f 0 #f 0 #f 0 #f))
    #f))
-(void (register-vk-instance! instance))
+(void (vk-use-instance! instance))
 
 (define-values (r2 pds) (vkEnumeratePhysicalDevices instance))
 (define pd (vector-ref pds 0))
@@ -41,7 +41,7 @@
                                 #f 0 qfi 1 prio)
                  0 #f 0 #f #f))
    #f))
-(void (register-vk-device! device))
+(void (vk-use-device! device))
 
 (define-values (r4 pool)
   (vkCreateCommandPool device

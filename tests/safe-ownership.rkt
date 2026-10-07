@@ -12,7 +12,7 @@
          racket/string
          racket/runtime-path
          ffi/unsafe
-         vulkan/unsafe)
+         vulkan/manual)
 
 (define-runtime-path here ".")
 (define safe-inc (build-path here ".." "vulkan" "generated" "safe.inc"))

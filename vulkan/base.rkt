@@ -15,12 +15,12 @@
 
 ;; ------------------------------------------------------------------
 ;; libvulkan
-(define libvulkan
+(define libvulkan-delayed
   (case (system-type 'os)
     [(windows) (delay (ffi-lib "vulkan"))]
     [else (delay (ffi-lib "libvulkan" '("1" "")))]))
 
-(define (vk-lib) (force libvulkan))
+(define (libvulkan) (force libvulkan-delayed))
 
 ;; ------------------------------------------------------------------
 ;; 版本辅助宏（C 头文件里的宏，vk.xml 无法直接生成）
@@ -65,60 +65,70 @@
 
 ;; ------------------------------------------------------------------
 ;; 分派加载：global / instance / device
-(define current-instance (make-parameter #f))
-(define current-device (make-parameter #f))
+(define current-vk-instance (make-parameter #f))
+(define current-vk-device (make-parameter #f))
 ;; 缓存 key = (name level instance device)。用 make-hash（equal?），
 ;; 因为 cpointer 只有按地址比较才能命中。
-(define proc-cache (make-hash))
+(define vk-proc-cache (make-hash))
 
-(define (vk-invalidate-cache!) (hash-clear! proc-cache))
+(define (vk-proc-cache-clear!) (hash-clear! vk-proc-cache))
 
-(define (register-vk-instance! inst)
-  (current-instance inst)
-  (current-device #f)
+(define (vk-use-instance! inst)
+  (current-vk-instance inst)
+  (current-vk-device #f)
   inst)
 
-(define (register-vk-device! dev)
-  (current-device dev)
+(define (vk-use-device! dev)
+  (current-vk-device dev)
   dev)
 
 ;; vkGetInstanceProcAddr / vkGetDeviceProcAddr 必须最先可用，故手写
 (define vkGetInstanceProcAddr
-  (get-ffi-obj "vkGetInstanceProcAddr" (vk-lib) (_fun _pointer _string/utf-8 -> _pointer)))
+  (get-ffi-obj "vkGetInstanceProcAddr" (libvulkan) (_fun _pointer _string/utf-8 -> _pointer)))
 (define vkGetDeviceProcAddr
-  (get-ffi-obj "vkGetDeviceProcAddr" (vk-lib) (_fun _pointer _string/utf-8 -> _pointer)))
+  (get-ffi-obj "vkGetDeviceProcAddr" (libvulkan) (_fun _pointer _string/utf-8 -> _pointer)))
 
 (define (vk-get-instance-proc inst name)
   (vkGetInstanceProcAddr (or inst #f) name))
 (define (vk-get-device-proc dev name)
   (vkGetDeviceProcAddr (or dev #f) name))
 
-(define (vk-symbol name)
-  (ffi-obj-ref name (vk-lib) (λ () #f)))
+(define (vk-lib-symbol name)
+  (ffi-obj-ref name (libvulkan) (λ () #f)))
 
-(define (vk-resolve name level)
-  (define inst (current-instance))
-  (define dev (current-device))
+(define (vk-resolve-proc name level)
+  (define inst (current-vk-instance))
+  (define dev (current-vk-device))
   (case level
-    [(global)   (or (vk-symbol name) (vk-get-instance-proc #f name))]
+    [(global)   (or (vk-lib-symbol name) (vk-get-instance-proc #f name))]
     [(instance) (or (and inst (vk-get-instance-proc inst name))
                     (vk-get-instance-proc #f name)
-                    (vk-symbol name))]
+                    (vk-lib-symbol name))]
     [(device)   (or (and dev (vk-get-device-proc dev name))
                     (and inst (vk-get-instance-proc inst name))
                     (vk-get-instance-proc #f name)
-                    (vk-symbol name))]
-    [else (vk-symbol name)]))
+                    (vk-lib-symbol name))]
+    [else (vk-lib-symbol name)]))
+
+;; 命令不可用时抛这个（可捕获，便于 capability 降级）。
+(struct exn:fail:vulkan:unavailable exn:fail (command) #:transparent)
+
+;; 命令在当前 instance/device 上下文是否可解析（不抛异常；不缓存）。
+(define (vk-proc-available? name [level 'instance])
+  (and (vk-resolve-proc (if (symbol? name) (symbol->string name) name) level) #t))
 
 (define (vk-lookup-proc name level fun-type)
-  (define key (list name level (current-instance) (current-device)))
-  (hash-ref proc-cache key
+  (define key (list name level (current-vk-instance) (current-vk-device)))
+  (hash-ref vk-proc-cache key
             (λ ()
-              (define ptr (vk-resolve (symbol->string name) level))
+              (define ptr (vk-resolve-proc (symbol->string name) level))
               (unless ptr
-                (error 'vulkan "Vulkan command not available: ~a" name))
+                (raise (exn:fail:vulkan:unavailable
+                        (format "Vulkan command not available: ~a" name)
+                        (current-continuation-marks)
+                        name)))
               (define p (function-ptr ptr fun-type))
-              (hash-set! proc-cache key p)
+              (hash-set! vk-proc-cache key p)
               p)))
 
 ;; define-vk：每条命令按当前 instance/device 查表（表内缓存）。
@@ -137,3 +147,4 @@
 ;; 类型/常量（命令见 vulkan/commands.rkt）
 (include "generated/constants.inc")
 (include "generated/types.inc")
+(include "generated/pnext.inc")

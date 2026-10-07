@@ -21,21 +21,38 @@ racket-vulkan/
     bindings.rkt              # (require vulkan/bindings)  => 原始表面 = base + commands
     raw.rkt                   # (require vulkan/raw)       => = bindings（语义别名）
     memory.rkt                # (require vulkan/memory)    => 内存/所有权原语（R5）
+    support.rkt               # VkResult 错误检查 + 枚举输出（safe/capability 共用）
     api-facts.rkt             # 运行期 API 事实 IR：vk-param / vk-command
-    unsafe.rkt                # (require vulkan/unsafe)    => 兼容入口 = bindings + memory
+    callback.rkt              # 回调令牌：稳定 _cprocedure 指针 + 保活
+    pnext.rkt                 # pNext/sType 糖：vk-struct / vk-chain!
+    capability.rkt            # 扩展枚举/可用性（instance/device）
+    map.rkt                   # 设备内存映射：vk-map / vk-unmap
+    manual.rkt                # (require vulkan/manual)    => 手动模式 = bindings + memory
+    unsafe.rkt                # (require vulkan/unsafe)    => 已弃用别名（= manual）
     safe.rkt                  # (require vulkan/safe)      => 组合层糖（原生名，不导出裸命令）
     window.rkt                # (require vulkan/window)    => GLFW 窗口（与绑定无关）
     generate.rkt              # 生成器入口：vk.xml -> generated/*
-    gen/
+    generator/
+      xexpr.rkt               # 极简 XML 读取工具
+      registry.rkt            # 读 XML + feature/extension 依赖闭包
+      extensions.rkt          # 扩展选择：common / all / 逗号列表
+      constants.rkt           # 常量值解析与排序
+      ctype.rkt               # C 类型 -> ctype + struct 成员解析
+      facts-build.rkt         # XML -> vk-command / vk-param（运行期 IR）
+      emit-types.rkt          # types.inc
+      emit-commands.rkt       # commands.inc + api.rkt 数据
+      emit-pnext.rkt          # pnext.inc（sType / pNext setter 表）
       classify.rkt            # 命令 -> (shape . plan)（纯函数）
-      emit.rkt                # 逐形状 emitter + 组合
+      emit.rkt                # safe.inc（逐形状 emitter + 组合）
     generated/
       constants.inc           # VK_* 常量（整数）
       types.inc               # _VkX ctype / define-cstruct
       commands.inc            # (define-vk ...) 原始命令 + 分派层级（无错误策略）
       safe.inc                # 糖：vk-create-*/vk-get-*/vk-cmd-*（R1 返回值，含 check-vk-result）
+      pnext.inc               # vk-struct-sType / vk-pNext-setters 表
       api.rkt                 # 命令/参数事实（vk-command/vk-param），供组合层/测试消费
       abi_check.c             # ABI 对照 C 程序（core struct/union 的 sizeof/alignof）
+      unknown-types.txt       # 未知类型审计（退化成 _pointer 的类型；应为空）
     registry/
       vk-1.4.363.xml          # 生成基准（最新稳定 SDK tag）
       vk-1.4.309.xml          # 与本机 loader 对齐
@@ -50,7 +67,7 @@ racket-vulkan/
     triangle-glfw.rkt         # 图形管线 + 渲染 + 显示（用 vulkan/window）
     triangle-x11.rkt          # 同上，但手写 X11（对照）
     shaders/                  # triangle.vert/.frag + 编译出的 .spv
-    arena-test.rkt            # 内存/所有权单元测试
+    memory-arena.rkt          # 内存/所有权单元测试
     safe-ownership.rkt        # 数组 free 的所有权回归
     dispatch-cache.rkt        # 分派缓存按 instance/device 分桶回归
     generate-aliases.rkt      # 生成器 alias 正确性 + 可复现回归
@@ -62,6 +79,12 @@ racket-vulkan/
     auto-output.rkt           # 自动输出糖（单输出 / enumerate）
     auto-input.rkt            # 输入类糖（调用作用域 + 数组）
     abi.rkt                   # C sizeof/alignof ABI 对照
+    bitfield.rkt              # bitfield 存储单元打包 + 多维数组布局回归
+    extensions.rkt            # 扩展选择（common/all）+ 未知类型审计回归
+    callback.rkt              # 回调保活（稳定指针 / arena 保活 / 往返调用）
+    pnext.rkt                 # pNext/sType（vk-struct 自动 sType + vk-chain! 保活）
+    capability.rkt            # vk-proc-available? + 扩展枚举 + unavailable 异常
+    map.rkt                   # 设备内存 map/unmap（写读回验证）
     comp.spv                  # 预编译 SPIR-V（Mandelbrot，来自参考实现）
   README.md
   ARCHITECTURE.md             # 分层、GC/所有权冲突、假设与“重新考虑触发条件”
@@ -76,11 +99,18 @@ racket-vulkan/
 | `vulkan/commands` | 原始命令（返回 `VkResult`） |
 | `vulkan/bindings` / `vulkan/raw` | 原始表面 = base + commands（裸命令用 Vulkan 原生名） |
 | `vulkan/memory` | 内存/所有权原语（`vk-malloc`/`stable-bytes`/arena、handle↔arena） |
+| `vulkan/support` | `check-vk-result` + `vk-enumerate-result`/`-void`（safe/capability 共用） |
+| `vulkan/callback` | 回调令牌（`make-vk-callback`/`vk-callback-keep!`，稳定指针 + 保活） |
+| `vulkan/pnext` | pNext/sType 糖（`vk-struct` 自动 sType、`vk-chain!` 串链 + 保活） |
+| `vulkan/capability` | 扩展枚举与可用性（`vk-proc-available?`、instance/device 扩展） |
+| `vulkan/map` | 设备内存映射薄封装（`vk-map` / `vk-unmap`，不归 GC） |
+| `vulkan/manual` | 手动模式 = `bindings` + `memory`（裸命令 + arena，无错误策略） |
+| `vulkan/unsafe` | 已弃用别名（= `vulkan/manual`） |
 | `vulkan/safe` | 组合层糖（`check-vk-result` + `vk-create-*`/`vk-get-*`/`vk-cmd-*` 等），糖也是 Vulkan 原生名，**不导出裸命令** |
 | `vulkan` | facade：糖（原生名）+ 类型/常量/原子，裸命令以 `raw:` 前缀 |
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） |
 | `vulkan/generated/api` | 命令/参数事实数据（`vk-command-facts`），供组合层/测试消费 |
-| `vulkan/gen/*` | 生成器内部：`classify`（shape+plan）/ `emit`（逐形状） |
+| `vulkan/generator/*` | 生成器内部：`classify`（shape+plan）/ `emit`（逐形状） |
 | `vulkan/window` | GLFW 窗口，与绑定无关 |
 
 > **命名靠模块隔离（方案 A）**：`vulkan/safe` 的 `vkCreateBuffer` 是糖（builder），
@@ -97,6 +127,11 @@ VK_KHR_wayland_surface,VK_EXT_debug_utils,VK_KHR_get_physical_device_properties2
 VK_KHR_get_surface_capabilities2,VK_KHR_display,VK_EXT_headless_surface"
 racket vulkan/generate.rkt vulkan/registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 "$EXTS"
 
+# 常用集（= 上面 10 个）：
+racket vulkan/generate.rkt vulkan/registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 common
+# 所有 includable 扩展（非 provisional / 非 disabled）：
+racket vulkan/generate.rkt vulkan/registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 all
+
 # 省略参数则用默认：vulkan/registry/vk-1.4.363.xml -> vulkan/generated，VK_VERSION_1_0
 racket vulkan/generate.rkt
 ```
@@ -105,7 +140,11 @@ racket vulkan/generate.rkt
 > `raco make vulkan/base.rkt vulkan/commands.rkt vulkan/bindings.rkt vulkan/safe.rkt vulkan/main.rkt`，或直接删除 `vulkan/compiled/`、`tests/compiled/`。
 > 否则可能仍加载旧绑定（表现为新命令/类型 “unbound identifier”）。
 
-参数：`<vk.xml> <out-dir> <feature> [逗号分隔的扩展]`。
+参数：`<vk.xml> <out-dir> <feature> [扩展]`。
+
+- 第 4 个参数是扩展选择：`common`（常用集）/ `all`（所有 includable）/ 逗号分隔名单 / 空。
+- 生成后会写 `generated/unknown-types.txt`：任何退化成 `_pointer` 的未知类型名（应为空）；
+  设 `VULKAN_GEN_STRICT=1` 时未知类型直接报错（用于加扩展前审计）。
 
 - 第 3 个参数是目标 feature；生成器沿 `depends` 展开依赖闭包
   （`VK_VERSION_1_4` → 全部 `VK_*_VERSION_1_0..1_4`）。
@@ -154,8 +193,8 @@ racket vulkan/generate.rkt
 ;; (vkCmdSetViewport cmd 0 (vector vp1 vp2))
 
 ;; 注册 instance / device，命令会据此经 GIPA/GDPA 解析
-(register-vk-instance! inst)
-;; (register-vk-device! dev)
+(vk-use-instance! inst)
+;; (vk-use-device! dev)
 ```
 
 > 只要裸命令用 `(require vulkan/bindings)`（或 `vulkan/raw`）；
@@ -181,7 +220,7 @@ racket vulkan/generate.rkt
 (glfw-required-instance-extensions)
 
 ;; 直接创建 VkSurfaceKHR（raw pointer，调用方 cast 成 _VkSurfaceKHR）
-(define surface (cast (glfw-window-create-surface win instance) _pointer _VkSurfaceKHR))
+(define surface (cast (glfw-create-vk-surface win instance) _pointer _VkSurfaceKHR))
 
 ;; 主循环：关窗、Esc、尺寸都由 GLFW 管
 (let loop ()
@@ -229,6 +268,87 @@ GLFW 用 `glfwCreateWindowSurface` 在 X11/Wayland/Windows/macOS 上直接建表
 | `with-vk-arena` | 在 arena 里执行 body，返回 `(values 结果 arena)` |
 | `with-vk-call` | `with-vk-arena` 的策略别名（多条命令共享调用作用域） |
 | `vk-handle-arena-set!` / `vk-handle-arena-remove!` / `vk-handle-arena` | 句柄 ↔ arena 注册表 |
+| `vk-callback-keep!` / `make-vk-callback` / `vk-callback-release!` | 把 Racket 过程变成稳定 C 回调并登记到 arena |
+
+## 回调（funcpointer）
+
+`_PFN_*` 是 `_cprocedure`；结构体里的函数指针字段是 `_pointer`。把 Racket 过程
+转成回调时**只转一次**并显式保活（`_cprocedure` 的默认保活是弱表，同一过程
+重复转换会被覆盖）：
+
+```racket
+(require vulkan)
+
+(define (on-message severity types data user-data)
+  (eprintf "[vk] ~a\n" severity)
+  0)                                  ; VK_FALSE
+
+(vkCreateDebugUtilsMessengerEXT
+ instance
+ (λ ()
+   (vk-new make-VkDebugUtilsMessengerCreateInfoEXT
+           VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT
+           #f 0 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+           VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+           (vk-callback-keep! _PFN_vkDebugUtilsMessengerCallbackEXT on-message)
+           #f))                       ; pUserData；上下文也可用闭包捕获
+ #f)
+```
+
+`vk-callback-keep!` 在 builder 里调用 → 令牌登记到对象的 arena，随对象销毁而释放。
+回调可能在驱动线程触发，**不要**在回调里依赖 `current-vk-arena` 等动态参数。
+
+## pNext / sType
+
+`generated/pnext.inc` 提供两张表；糖层对应两个辅助：
+
+```racket
+(require vulkan)
+
+;; 自动填 sType（由结构名查表）、pNext=#f，并登记到当前 arena
+(define ici (vk-struct make-VkInstanceCreateInfo 0 #f 0 #f 0 #f))
+(define dbg (vk-struct make-VkDebugUtilsMessengerCreateInfoEXT
+                      0 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT #f #f))
+
+;; 串链 ici -> dbg：按每个节点的 sType 查 setter，并把节点登记到 arena
+(vk-chain! ici dbg)
+```
+
+- `vk-struct` 只覆盖“首成员 `sType`、次成员 `pNext`”的干净形状，其余参数按生成构造器顺序给。
+- 裸 `set-VkX-pNext!` / `VkX-pNext` 仍然可用。
+
+## 能力查询（capability）
+
+```racket
+(require vulkan)
+
+(vk-proc-available? 'vkCreateInstance 'global)         ; => #t
+(vk-instance-extension-available? "VK_KHR_surface")    ; => #t/#f
+(vk-device-extension-properties physical-device)        ; => 扩展名列表
+
+;; 命令不可用抛可捕获的专用异常
+(with-handlers ([exn:fail:vulkan:unavailable? (λ (e) ... 降级 ...)])
+  (vkSomeExtensionCommand ...))
+```
+
+- 命令在首次调用时经 GIPA/GDPA 解析；不可用抛 `exn:fail:vulkan:unavailable`（带 `command`）。
+- `(require vulkan/capability)` 也可单独 require（`vulkan/manual` 用户可加）。
+
+## 设备内存映射
+
+设备内存不归 Racket GC，`vk-map` 只做薄封装（返回的指针由驱动拥有，**不**登记 arena）：
+
+```racket
+(require vulkan)
+
+(define-values (r ptr) (vk-map device memory 0 size))   ; -> (values result pointer)
+(ptr-set! ptr _uint32 0 #xDEADBEEF)
+(vk-unmap device memory)
+```
+
+非一致内存的 flush/invalidate（`VkMappedMemoryRange` 含 `pNext`，非 flat）仍是裸命令：
+`raw:vkFlushMappedMemoryRanges` / `raw:vkInvalidateMappedMemoryRanges`。
 
 ## 运行测试
 
@@ -244,8 +364,10 @@ PLTCOLLECTS="$PWD:" racket tests/compute-safe.rkt   # 完整 compute（安全层
 PLTCOLLECTS="$PWD:" racket tests/surface-x11.rkt    # 手写 Xlib surface + swapchain
 PLTCOLLECTS="$PWD:" racket tests/triangle-glfw.rkt       # GLFW 窗口 + 图形管线 + 渲染 + 显示
 PLTCOLLECTS="$PWD:" racket tests/triangle-glfw.rkt --loop  # 持续渲染，关窗/Esc 退出
-PLTCOLLECTS="$PWD:" racket tests/arena-test.rkt     # 内存/所有权单测
+PLTCOLLECTS="$PWD:" racket tests/memory-arena.rkt     # 内存/所有权单测
 PLTCOLLECTS="$PWD:" racket tests/abi.rkt           # C sizeof/alignof ABI 对照（需 gcc + vulkan 头文件）
+PLTCOLLECTS="$PWD:" racket tests/bitfield.rkt      # bitfield 打包 + 多维数组（需 gcc）
+PLTCOLLECTS="$PWD:" racket tests/extensions.rkt    # common/all 扩展选择 + 未知类型审计
 
 # 重新编译 shader（已提交 .spv，一般不需要）
 cd tests/shaders && glslangValidator -V triangle.vert -o triangle.vert.spv \
@@ -294,3 +416,5 @@ Vulkan 驱动会在调用期间/之后持有这些指针，一旦 GC 移动内�
    返回句柄 vector；`vkCreateGraphicsPipelines` 这类显式 count 命令的 builder 返回 struct vector。
 3. flags/enum 用整数（可用 `bitwise-ior` 组合），若要用 Racket 原生 `_bitmask`/`_enum` 需另配。
 4. 当前只纳入 10 个扩展；其余扩展用第 4 个参数按需加入。
+5. C 位域无法用 `define-cstruct` 直接表达，已按「存储单元」打包为 `_bitsN` 整型字段；
+   每个具名位域通过生成的 `VkX-<field>` / `set-VkX-<field>!` 读写（`reserved` 不生成）。

@@ -1,6 +1,6 @@
 #lang racket/base
 ;; 创建逻辑设备 + 通过 GDPA 调用 device 级命令（旧绑定做不到的部分）
-(require vulkan/unsafe ffi/unsafe racket/sequence)
+(require vulkan/manual ffi/unsafe racket/sequence)
 
 (define (make-instance)
   (define app (make-VkApplicationInfo VK_STRUCTURE_TYPE_APPLICATION_INFO #f #f 0 #f 0 VK_API_VERSION_1_0))
@@ -10,7 +10,7 @@
   (ptr-ref p _VkInstance))
 
 (define inst (make-instance))
-(register-vk-instance! inst)
+(vk-use-instance! inst)
 
 (define cnt (malloc _uint32))
 (vkEnumeratePhysicalDevices inst cnt #f)
@@ -39,7 +39,7 @@
 (define dp (malloc _VkDevice))
 (vkCreateDevice pd dci #f dp)
 (define dev (ptr-ref dp _VkDevice))
-(register-vk-device! dev)          ; <-- 之后 device 级命令走 vkGetDeviceProcAddr
+(vk-use-device! dev)          ; <-- 之后 device 级命令走 vkGetDeviceProcAddr
 (printf "device = ~a\n" dev)
 
 ;; 通过 GDPA 调一个 device 级命令

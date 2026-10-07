@@ -24,8 +24,8 @@
   #:transparent)
 
 (define shape-symbols
-  '(create-single create-array create-info-count
-    destroy-single destroy-array
+  '(make-handle make-handles make-handles-info-count
+    destroy-handle destroy-handles
     out-single out-array
     in-single in-array
     skip))
@@ -83,9 +83,9 @@
      (cond
        [(and output info)
         (if cn
-            (mk c 'create-array #:dispatch d #:passthrough (args-except info output cn)
+            (mk c 'make-handles #:dispatch d #:passthrough (args-except info output cn)
                 #:output output #:count cn #:input info)
-            (mk c 'create-single #:dispatch d #:passthrough (args-except info output)
+            (mk c 'make-handle #:dispatch d #:passthrough (args-except info output)
                 #:output output #:input info))]
        [else (mk c 'skip #:dispatch d)])]
     ;; ---- allocate（count 在 info 结构体里）----
@@ -95,15 +95,15 @@
      (define cf (vk-command-count-field c))
      (cond
        [(and output info cf)
-        (mk c 'create-info-count #:dispatch d #:passthrough (args-except info output)
+        (mk c 'make-handles-info-count #:dispatch d #:passthrough (args-except info output)
             #:output output #:input info #:count-info-field cf)]
        [(and output info)
-        (mk c 'create-single #:dispatch d #:passthrough (args-except info output)
+        (mk c 'make-handle #:dispatch d #:passthrough (args-except info output)
             #:output output #:input info)]
        [else (mk c 'skip #:dispatch d)])]
     ;; ---- destroy ----
     [(starts? nm "vkDestroy")
-     (mk c 'destroy-single #:dispatch d #:passthrough (ps c)
+     (mk c 'destroy-handle #:dispatch d #:passthrough (ps c)
          #:output (or (first-handle nd) d))]
     ;; ---- free ----
     [(starts? nm "vkFree")
@@ -111,10 +111,10 @@
      (define arr (for/first ([p (in-list nd)] #:when (and (ptr? p) (handle? p) (not (cnt? p)))) p))
      (cond
        [(and cn arr)
-        (mk c 'destroy-array #:dispatch d #:passthrough (ps c)
+        (mk c 'destroy-handles #:dispatch d #:passthrough (ps c)
             #:output arr #:count cn)]
        [else
-        (mk c 'destroy-single #:dispatch d #:passthrough (ps c)
+        (mk c 'destroy-handle #:dispatch d #:passthrough (ps c)
             #:output (or (first-handle nd) d))])]
     ;; ---- 输出：单输出 / 数组输出（enumerate）----
     [else
