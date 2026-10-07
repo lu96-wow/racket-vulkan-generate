@@ -22,6 +22,7 @@ racket-vulkan/
     raw.rkt                   # (require vulkan/raw)       => = bindings（语义别名）
     memory.rkt                # (require vulkan/memory)    => 内存/所有权原语（R5）
     support.rkt               # VkResult 错误检查 + 枚举输出（safe/capability 共用）
+    context.rkt               # vk-context：instance/device/缓存/arena 注册表（默认 per-thread）
     api-facts.rkt             # 运行期 API 事实 IR：vk-param / vk-command
     callback.rkt              # 回调令牌：稳定 _cprocedure 指针 + 保活
     pnext.rkt                 # pNext/sType 糖：vk-struct / vk-chain!
@@ -85,6 +86,7 @@ racket-vulkan/
     pnext.rkt                 # pNext/sType（vk-struct 自动 sType + vk-chain! 保活）
     capability.rkt            # vk-proc-available? + 扩展枚举 + unavailable 异常
     map.rkt                   # 设备内存 map/unmap（写读回验证）
+    context.rkt               # 状态分层：context 共享 / 线程隔离 / vk-use-* 同步
     comp.spv                  # 预编译 SPIR-V（Mandelbrot，来自参考实现）
   README.md
   ARCHITECTURE.md             # 分层、GC/所有权冲突、假设与“重新考虑触发条件”
@@ -100,6 +102,7 @@ racket-vulkan/
 | `vulkan/bindings` / `vulkan/raw` | 原始表面 = base + commands（裸命令用 Vulkan 原生名） |
 | `vulkan/memory` | 内存/所有权原语（`vk-malloc`/`stable-bytes`/arena、handle↔arena） |
 | `vulkan/support` | `check-vk-result` + `vk-enumerate-result`/`-void`（safe/capability 共用） |
+| `vulkan/context` | `vk-context`（instance/device/命令缓存/arena 注册表）+ `with-vk-context`；默认按线程隔离（owner 标记），无全局 |
 | `vulkan/callback` | 回调令牌（`make-vk-callback`/`vk-callback-keep!`，稳定指针 + 保活） |
 | `vulkan/pnext` | pNext/sType 糖（`vk-struct` 自动 sType、`vk-chain!` 串链 + 保活） |
 | `vulkan/capability` | 扩展枚举与可用性（`vk-proc-available?`、instance/device 扩展） |
@@ -267,7 +270,7 @@ GLFW 用 `glfwCreateWindowSurface` 在 X11/Wayland/Windows/macOS 上直接建表
 | `vk-zero` | 零初始化的不可移动结构体（用于输出/逐字段 set） |
 | `with-vk-arena` | 在 arena 里执行 body，返回 `(values 结果 arena)` |
 | `with-vk-call` | `with-vk-arena` 的策略别名（多条命令共享调用作用域） |
-| `vk-handle-arena-set!` / `vk-handle-arena-remove!` / `vk-handle-arena` | 句柄 ↔ arena 注册表 |
+| `vk-handle-arena-set!` / `vk-handle-arena-remove!` / `vk-handle-arena` | 句柄 ↔ arena 注册表（在 `vulkan/context`，默认 per-thread；共享用 `with-vk-context`） |
 | `vk-callback-keep!` / `make-vk-callback` / `vk-callback-release!` | 把 Racket 过程变成稳定 C 回调并登记到 arena |
 
 ## 回调（funcpointer）

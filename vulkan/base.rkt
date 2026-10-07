@@ -67,19 +67,43 @@
 ;; 分派加载：global / instance / device
 (define current-vk-instance (make-parameter #f))
 (define current-vk-device (make-parameter #f))
-;; 缓存 key = (name level instance device)。用 make-hash（equal?），
-;; 因为 cpointer 只有按地址比较才能命中。
-(define vk-proc-cache (make-hash))
+;; 命令缓存**不再是全局**：默认为当前线程惰性创建；需要跨线程共享时，
+;; 由 vulkan/context 层绑定 `current-vk-proc-cache`。
+;; 值形如 (owner . cache)：owner=#f 表示显式共享；否则属某个线程。
+(define current-vk-proc-cache (make-parameter #f))
 
-(define (vk-proc-cache-clear!) (hash-clear! vk-proc-cache))
+;; 线程拥有的参数状态：值必须是 (owner . value)；若 owner 不是当前线程（或空），
+;; 就新建并写回当前线程的参数。这样继承到父线程的值不会造成隐式共享。
+(define (thread-local-value param make)
+  (define cur (param))
+  (cond
+    [(and cur (let ([o (car cur)]) (or (not o) (eq? o (current-thread))))) (cdr cur)]
+    [else (define v (make)) (param (cons (current-thread) v)) v]))
+
+(define (vk-proc-cache)
+  (thread-local-value current-vk-proc-cache make-hash))
+(define (vk-proc-cache-snapshot) (vk-proc-cache))
+(define (vk-proc-cache-clear!) (hash-clear! (vk-proc-cache)))
+
+;; 当前 dispatch context（#f = 未显式绑定）。基类只放 dispatch 相关字段；
+;; vulkan/context 的 vk-context 继承它（加 proc-cache / arena-registry）。
+(struct vk-base-context (instance device) #:mutable)
+(define current-vk-context (make-parameter #f))
 
 (define (vk-use-instance! inst)
   (current-vk-instance inst)
   (current-vk-device #f)
+  (define ctx (current-vk-context))
+  (when (vk-base-context? ctx)
+    (set-vk-base-context-instance! ctx inst)
+    (set-vk-base-context-device! ctx #f))
   inst)
 
 (define (vk-use-device! dev)
   (current-vk-device dev)
+  (define ctx (current-vk-context))
+  (when (vk-base-context? ctx)
+    (set-vk-base-context-device! ctx dev))
   dev)
 
 ;; vkGetInstanceProcAddr / vkGetDeviceProcAddr 必须最先可用，故手写
@@ -117,18 +141,24 @@
 (define (vk-proc-available? name [level 'instance])
   (and (vk-resolve-proc (if (symbol? name) (symbol->string name) name) level) #t))
 
+(define (vk-resolve-proc-ptr name level fun-type)
+  (define ptr (vk-resolve-proc (symbol->string name) level))
+  (unless ptr
+    (raise (exn:fail:vulkan:unavailable
+            (format "Vulkan command not available: ~a" name)
+            (current-continuation-marks)
+            name)))
+  (function-ptr ptr fun-type))
+
 (define (vk-lookup-proc name level fun-type)
+  ;; 缓存 key = (name level instance device)；用 make-hash（equal?），
+  ;; 因为 cpointer 只有按地址比较才能命中。
   (define key (list name level (current-vk-instance) (current-vk-device)))
-  (hash-ref vk-proc-cache key
+  (define cache (vk-proc-cache))
+  (hash-ref cache key
             (λ ()
-              (define ptr (vk-resolve-proc (symbol->string name) level))
-              (unless ptr
-                (raise (exn:fail:vulkan:unavailable
-                        (format "Vulkan command not available: ~a" name)
-                        (current-continuation-marks)
-                        name)))
-              (define p (function-ptr ptr fun-type))
-              (hash-set! vk-proc-cache key p)
+              (define p (vk-resolve-proc-ptr name level fun-type))
+              (hash-set! cache key p)
               p)))
 
 ;; define-vk：每条命令按当前 instance/device 查表（表内缓存）。

@@ -18,7 +18,7 @@
          type-dependencies find-count-field
          (struct-out vk-cfield) (struct-out vk-bitgroup)
          struct-layout bitmask-64?
-         unknown-type-names clear-unknown-types!)
+         current-unknown-type)
 
 (define base-ctype
   (hash "void" '_void "char" '_byte "signed char" '_int8 "unsigned char" '_uint8
@@ -70,11 +70,13 @@
   (and ty (cat-of ty)))
 
 ;; ------------------------------------------------------------------
-;; 未知类型审计：ctype-of-type-name 退化成 _pointer 时记录，供生成器报告。
-(define unknown-types (make-hash))
-(define (clear-unknown-types!) (hash-clear! unknown-types))
-(define (unknown-type-names) (sort (hash-keys unknown-types) string<?))
-(define (mark-unknown! nm) (hash-set! unknown-types nm #t) '_pointer)
+;; 未知类型审计：ctype-of-type-name 退化成 _pointer 时**通过回调上报**，
+;; 状态由调用方（driver）持有——本模块无全局。
+(define current-unknown-type (make-parameter #f))
+(define (mark-unknown! nm)
+  (define f (current-unknown-type))
+  (when f (f nm))
+  '_pointer)
 
 (define (ctype-of-type-name reg nm)
   (cond

@@ -47,7 +47,9 @@
 ;; ------------------------------------------------------------------
 ;; 1. 注册表 + 依赖闭包
 (define reg (load-registry in-xml))
-(clear-unknown-types!)
+;; 未知类型收集器由 driver 持有（ctype 层无全局）。
+(define unknown-set (make-hash))
+(current-unknown-type (λ (n) (hash-set! unknown-set n #t)))
 (define closure (feature-closure reg target-feature))
 (define requested-extensions (resolve-extensions reg target-extensions))
 (define ext-closure (extension-closure reg requested-extensions))
@@ -159,7 +161,7 @@
 (define abi-count (emit-abi-c (out-file "abi_check.c")))
 
 ;; 未知类型审计：任何退化成 _pointer 的类型都写进报告；strict 模式下报错
-(define unknowns (unknown-type-names))
+(define unknowns (sort (hash-keys unknown-set) string<?))
 (call-with-output-file (out-file "unknown-types.txt") #:exists 'replace
   (λ (o) (for ([n (in-list unknowns)]) (displayln n o))))
 (cond

@@ -16,7 +16,7 @@
 
 (require ffi/unsafe)
 
-(provide (except-out (all-defined-out) vk-handle-arenas))
+(provide (all-defined-out))
 
 (struct vk-arena (kept) #:mutable)
 (define (make-vk-arena) (vk-arena '()))
@@ -81,10 +81,10 @@
   (begin0 (parameterize ([current-vk-arena arena]) body ...)
           (vk-arena-reset! arena)))
 
-;; 句柄 -> arena：创建时绑定，销毁时解绑。
-;; 用 make-hash（equal?）：数组元素经 ptr-ref 读回时是新 cpointer 对象，
-;; 只有按地址比较（equal?）才能命中；make-hasheqv 的 eqv? 会 miss。
-(define vk-handle-arenas (make-hash))
-(define (vk-handle-arena-set! h a) (hash-set! vk-handle-arenas h a) h)
-(define (vk-handle-arena-remove! h) (hash-remove! vk-handle-arenas h))
-(define (vk-handle-arena h) (hash-ref vk-handle-arenas h #f))
+;; 显式在当前线程把代码跑在指定 arena 下（供预存在的 worker 线程用）。
+(define (vk-arena-run arena thunk)
+  (parameterize ([current-vk-arena arena]) (thunk)))
+
+;; 开一个绑定到该 arena 的线程（现场开的线程本会继承参数，这里显式绑定）。
+(define (vk-arena-thread arena thunk)
+  (thread (λ () (vk-arena-run arena thunk))))

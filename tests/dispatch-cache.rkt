@@ -17,29 +17,29 @@
 (define (resolve!) (vk-lookup-proc 'vkEnumerateInstanceVersion 'global fun-type))
 
 (vk-proc-cache-clear!)
-(check-equal? (hash-count vk-proc-cache) 0)
+(check-equal? (hash-count (vk-proc-cache-snapshot)) 0)
 
 ;; 上下文一：默认 instance=#f, device=#f
 (void (resolve!))
-(check-equal? (hash-count vk-proc-cache) 1 "one entry per context")
+(check-equal? (hash-count (vk-proc-cache-snapshot)) 1 "one entry per context")
 
 ;; 上下文二：换 instance（device 重置为 #f）→ 新 key
 (void (vk-use-instance! 'fake-instance))
 (void (resolve!))
-(check-equal? (hash-count vk-proc-cache) 2 "new instance => new cache entry")
+(check-equal? (hash-count (vk-proc-cache-snapshot)) 2 "new instance => new cache entry")
 
 ;; 上下文三：再换 device → 又一个 key
 (void (vk-use-device! 'fake-device))
 (void (resolve!))
-(check-equal? (hash-count vk-proc-cache) 3 "new device => new cache entry")
+(check-equal? (hash-count (vk-proc-cache-snapshot)) 3 "new device => new cache entry")
 
 ;; 回到上下文一：命中已有缓存，不应增长
 (void (vk-use-instance! #f))
 (void (resolve!))
-(check-equal? (hash-count vk-proc-cache) 3 "re-entering a context reuses its cache entry")
+(check-equal? (hash-count (vk-proc-cache-snapshot)) 3 "re-entering a context reuses its cache entry")
 
 ;; 缓存 key 确实是四元组，含 instance/device
-(for ([k (in-list (hash-keys vk-proc-cache))])
+(for ([k (in-list (hash-keys (vk-proc-cache-snapshot)))])
   (check-equal? (length k) 4 "cache key is (name level instance device)")
   (check-equal? (car k) 'vkEnumerateInstanceVersion))
 

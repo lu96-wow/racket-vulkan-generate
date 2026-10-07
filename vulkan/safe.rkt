@@ -17,6 +17,7 @@
          (prefix-in raw: "commands.rkt")   ; safe.inc 里的包装以 raw: 前缀调裸命令
          "memory.rkt"
          "support.rkt"
+         "context.rkt"
          "callback.rkt"
          "pnext.rkt"
          "capability.rkt"
@@ -27,6 +28,7 @@
 (provide (all-from-out "base.rkt")
          (all-from-out "memory.rkt")
          (all-from-out "support.rkt")
+         (all-from-out "context.rkt")
          (all-from-out "callback.rkt")
          (all-from-out "pnext.rkt")
          (all-from-out "capability.rkt")

@@ -85,12 +85,11 @@
               (let ([m (find-count-field reg (member-base-name info))])
                 (and m (string->symbol (member-name m))))))))
 
-;; struct/union 是否不含指针成员（递归）。缓存键含 registry（types-hash）
-;; 的 eq-hash-code，避免同一进程用不同 registry 时串味。
-(define flat-cache (make-hash))
-(define (flat-struct? reg base)
+;; struct/union 是否不含指针成员（递归）。缓存由调用方持有（api-commands
+;; 内建一个），不再有模块级全局；键含 registry（types-hash）的 eq-hash-code。
+(define (flat-struct? reg cache base)
   (define key (list base (eq-hash-code (registry-types-hash reg))))
-  (hash-ref flat-cache key
+  (hash-ref cache key
             (λ ()
               (define ty (hash-ref (registry-types-hash reg) (string->symbol base) #f))
               (define res
@@ -102,32 +101,33 @@
                               (define b (member-base-name m))
                               (or (not (hash-has-key? (registry-types-hash reg) (string->symbol b)))
                                   (not (struct/union-type-name? reg b))
-                                  (flat-struct? reg b))]))))
-              (hash-set! flat-cache key res)
+                                  (flat-struct? reg cache b))]))))
+              (hash-set! cache key res)
               res)))
 
-(define (api-param reg p)
+(define (api-param reg cache p)
   (define base (member-base-name p))
   (define ptr? (pointer-param? p))
   (define const? (param-const? p))
   (define kind (param-kind reg base))
-  (define flat? (if (memq kind '(struct union)) (flat-struct? reg base) #t))
+  (define flat? (if (memq kind '(struct union)) (flat-struct? reg cache base) #t))
   (vk-param (string->symbol (member-name p)) base (ctype-of-type-name reg base)
             ptr? const? (count-param? p) kind
             (and ptr? (not const?)) flat?))
 
-(define (api-command reg c)
+(define (api-command reg cache c)
   (define eff (resolve-command reg c))
   (vk-command (string->symbol (command-name c))
               (command-level reg eff)
               (command-result? reg c)
               (dispatch-base-of reg c)
-              (map (λ (p) (api-param reg p)) (params-of eff))
+              (map (λ (p) (api-param reg cache p)) (params-of eff))
               (allocate-count-field reg c)))
 
 (define (api-commands reg wanted-cmds)
+  (define cache (make-hash))
   (filter values
           (for/list ([nm wanted-cmds]
                      #:when (and nm (not (member nm skip-commands))))
             (define c (hash-ref (registry-commands-hash reg) (string->symbol nm) #f))
-            (and c (api-command reg c)))))
+            (and c (api-command reg cache c)))))

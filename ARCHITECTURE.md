@@ -68,9 +68,9 @@ registry/*.xml ──(generate.rkt)──▶ generated/{constants,types,commands
                      ├──────────────┬─────────────────────────────────┘
                      ▼              ▼
             vulkan/manual.rkt   vulkan/safe.rkt
-            （手动 = bindings    （组合层：support（错误/枚举）+ callback /
-              + memory；           pnext / capability + vk-create-* 糖；
-               unsafe = 别名）      不 re-export 裸命令）
+            （手动 = bindings    （组合层：context（缓存/arena 注册表）+
+              + memory；           support（错误/枚举）+ callback / pnext /
+               unsafe = 别名）       capability / map + vk-create-* 糖）
                      │              │
                      └──────┬───────┘
                             ▼
@@ -85,6 +85,7 @@ registry/*.xml ──(generate.rkt)──▶ generated/{constants,types,commands
 | `vulkan/bindings` / `vulkan/raw` | 原始表面 = base + commands | arena、错误抛出、create 包装 |
 | `vulkan/memory` | arena、`vk-malloc`/`stable-bytes`/`vk-new`、handle↔arena 绑定 | 任何 Vulkan 类型/命令 |
 | `vulkan/support` | `check-vk-result` + `vk-enumerate-result`/`-void`（错误/枚举支撑） | 包装、所有权 |
+| `vulkan/context` | `vk-context`（instance/device/命令缓存/arena 注册表）+ `with-vk-context` | 原语、命令 |
 | `vulkan/callback` | 回调令牌：稳定 `_cprocedure` 指针 + 保活 | 分配器实现、驱动回调策略 |
 | `vulkan/pnext` | pNext/sType 糖（`vk-struct` / `vk-chain!`） | 驱动的链校验策略 |
 | `vulkan/capability` | 扩展枚举与可用性（instance/device）+ `vk-proc-available?` | 降级策略 |
@@ -136,7 +137,7 @@ registry/*.xml ──(generate.rkt)──▶ generated/{constants,types,commands
 | 挂到当前 arena | `vk-keep!` | `vk-arena-keep-current!` |
 | 挂到指定 arena | `vk-keep-alive!` | `vk-arena-keep!` |
 | handle↔arena 绑定 | `vk-retain-for!` / `vk-release-for!` | `vk-handle-arena-set!` / `vk-handle-arena-remove!` |
-| handle→arena 查询 | `vk-object-arena` | `vk-handle-arena`（表 `vk-handle-arenas`，不导出） |
+| handle→arena 查询 | `vk-object-arena` | `vk-handle-arena`（context 层持有，默认 per-thread） |
 | arena 字段 | `items` | `kept` |
 | 读回句柄数组 | `vk-handle-vector` | `vk-read-handles`（归 safe） |
 | 错误检查 | `check-vkResult` | `check-vk-result` |
@@ -191,7 +192,8 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 - builder 约定：safe 包装在一个 arena 里执行 builder thunk，再把 arena
   `vk-handle-arena-set!` 到返回的句柄上；`vk-destroy-*`/`vk-free-*` 时 `vk-handle-arena-remove!`。
 - 句柄↔arena 注册表用 `equal?`（`make-hash`），因为数组元素 `ptr-ref` 读回的是
-  地址相同但 `eq?` 不同的新 cpointer。
+  地址相同但 `eq?` 不同的新 cpointer。注册表本身**不是全局**：默认按线程惰性创建，
+  存在 `vulkan/context` 的 `current-vk-arena-registry` 参数里；需共享就用 `with-vk-context`。
 
 **覆盖范围**：仅 `vkCreate*` / `vkAllocate*` / `vkDestroy*` / `vkFree*`。
 其余（`vkQueueSubmit`、`vkCmd*`、`vkUpdateDescriptorSets`、`vkMapMemory`、
@@ -231,9 +233,14 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
   上下文用闭包捕获或 `pUserData`。
 
 ### D. 线程
-- **D1**：`vk-handle-arenas` 是全局 `make-hash`，**无锁**。多线程并发创建对象会竞争。
-  **触发**：多线程资源创建 → 需 per-thread arena 或锁/不可变结构。
-- **D2**：`current-vk-arena` 是 parameter（thread-local），builder 里再开线程不继承。
+- **D1**：运行期不再有模块级可变全局。命令缓存（`current-vk-proc-cache`）与
+  handle↔arena 注册表（`current-vk-arena-registry`）都是参数状态，值带 **owner 标记**
+  `(owner . value)`：owner 不是当前线程就另建（因为线程会继承父线程的参数**值**）。
+  默认按线程隔离 → 无需锁/CAS。要共享就显式建 `vk-context` 并用
+  `with-vk-context`（owner=#f），并发由用户负责。
+- **D2**：Racket 线程会继承创建时的 parameterization；预存在的 worker 线程用
+  `vk-arena-thread` / `vk-arena-run` 绑定 arena，或手动 `vk-use-instance!`/`vk-use-device!`。
+  `vk-use-instance!`/`vk-use-device!` 会同步更新当前 `vk-context`。
 
 ### E. 句柄表示
 - **E1**：handle 统一 `_cpointer/null`，在 64 位构建正确。32 位构建下
@@ -545,6 +552,21 @@ Racket `define-cstruct` 不支持 C 位域，所以**一个存储单元打成一
     (vkSomeExtensionCommand ...))
   ```
 
+### 6.14 消除全局状态：context 层（`vulkan/context`）
+
+base/memory **没有模块级可变全局**；需要「默认/共享」的状态都提升为参数或 context：
+
+| 状态 | 位置 | 默认 |
+|------|------|------|
+| 命令指针缓存 | `current-vk-proc-cache`（base） | 当前线程（owner 标记） |
+| handle↔arena 注册表 | `current-vk-arena-registry`（context） | 当前线程（owner 标记） |
+
+- 参数值带 owner：线程继承到父线程的值时，owner 不匹配就另建 → **默认无跨线程共享**。
+- 需要显式/跨线程共享：`(make-vk-context)` + `(with-vk-context ctx thunk)`（owner=#f）绑定
+  instance/device/缓存/注册表；并发由用户负责。
+- `vk-use-instance!` / `vk-use-device!` 现在会同步更新当前 `vk-context`（单一事实源）。
+- `vk-arena-run` / `vk-arena-thread` 供（预存在的） worker 线程绑定 arena。
+
 ---
 
 ## 7. 路线图
@@ -571,3 +593,5 @@ Racket `define-cstruct` 不支持 C 位域，所以**一个存储单元打成一
 | N1 ✅ | 命名收敛（词表 + 分层回归）：§2.2；IR 出 `generator/`、策略归 safe、枚举去伪结果 | 全部 |
 | N2 ✅ | 公开名收敛（`vk-use-*`/`current-vk-*`/`manual`/window）+ `gen/`→`generator/` + shape 词表 | 全部 |
 | N3 ✅ | `generate.rkt` 拆为 registry/constants/ctype/facts-build/emit-types/emit-commands（输出逐字节不变） | generate |
+| N4 ✅ | 消除全局状态：命令缓存/arena 注册表 → 参数 + `vulkan/context` 层（默认 per-thread） | 全部 |
+| N5 ✅ | 默认语义收敛：owner 标记保证 per-thread 隔离；`vk-use-*` 同步更新当前 context | 全部 |

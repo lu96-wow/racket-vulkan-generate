@@ -1,6 +1,6 @@
 #lang racket/base
 ;; 安全层 / 内存规则的单元测试
-(require vulkan/manual ffi/unsafe rackunit)
+(require vulkan/manual vulkan/context ffi/unsafe rackunit)
 
 ;; 1. vk-malloc 分配的内存地址在 GC 后不变（不可移动）
 (define p (vk-malloc _uint32))
