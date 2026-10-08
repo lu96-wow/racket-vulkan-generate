@@ -18,9 +18,19 @@
          extension-closure collect-extension-requires extension-includable?)
 
 ;; types/types-hash：全部 type 元素（含 alias），types-hash 按 name 索引。
+;; version：从 XML 的 VK_HEADER_VERSION[_COMPLETE] 推出的 "X.Y.Z"（Vulkan 主线）。
 ;; commands-hash：按 name 索引的 command 元素（含 alias 命令）。
-(struct registry (types types-hash enums-blocks commands-hash features extensions)
+(struct registry (version types types-hash enums-blocks commands-hash features extensions)
   #:transparent)
+
+;; 提取 Vulkan 主线版本；忽略 Vulkan SC 的第二个 VK_HEADER_VERSION。
+(define (extract-registry-version root)
+  (define types (find-all-by-tag 'type (find-first-by-tag 'types root)))
+  (define (find-num rx)
+    (for/or ([ty (in-list types)]) (regexp-match rx (xtext ty))))
+  (define hm (find-num #px"#define\\s+VK_HEADER_VERSION\\s+([0-9]+)$"))
+  (define cm (find-num #px"VK_HEADER_VERSION_COMPLETE[^(]*\\(0,\\s*([0-9]+),\\s*([0-9]+),"))
+  (and hm cm (format "~a.~a.~a" (cadr cm) (caddr cm) (cadr hm))))
 
 (define (load-registry path)
   (define root (xml->xexpr (document-element (read-xml (open-input-file path)))))
@@ -36,7 +46,8 @@
   (for ([c commands-list])
     (define n (command-name c))
     (when n (hash-set! commands-hash (string->symbol n) c)))
-  (registry types types-hash
+  (registry (extract-registry-version root)
+            types types-hash
             (find-all-by-tag 'enums root)
             commands-hash
             (find-all-by-tag 'feature root)

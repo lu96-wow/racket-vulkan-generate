@@ -10,7 +10,9 @@
 ;; ============================================================
 
 (require "base.rkt"
-         "commands.rkt")
+         "commands.rkt"
+         "version.rkt")
 
 (provide (all-from-out "base.rkt")
-         (all-from-out "commands.rkt"))
+         (all-from-out "commands.rkt")
+         (all-from-out "version.rkt"))

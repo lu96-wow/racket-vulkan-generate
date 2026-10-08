@@ -65,6 +65,15 @@ Vulkan 对 host 内存的持有方式（决定需要多长的生命周期）：
 审计产物 `abi_check.c`/`unknown-types.txt` → `vulkan-gen/audit/`。
 `vulkan` 对 `vulkan-gen`/`registry` 零引用——删掉后两者，运行期仍可编译运行。
 
+资源获取标准化：`fetch-registry.rkt <version>` 按 Khronos git tag 拉取并自检
+（根元素 `<registry>` + `VK_HEADER_VERSION`），原子写入 `registry/vk-<version>.xml`；
+`rebuild.rkt` 在默认 xml 缺失时自动调用它。
+
+版本单一来源：包版本（`info.rkt` `version`）= 钉死的 Vulkan header 版本（`1.4.363`）；
+生成器把它与 feature/扩展写进 `vulkan/generated/version.rkt`（`vulkan/version` 再导出）；
+`tests/version.rkt` 锁定三者一致。`generated/` 不加版本目录——版本是元数据，
+不是命名空间（同时支持多 API 版本属另一维度，用 `vulkan/1-x` 命名空间另议）。
+
 ```
 registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,types,commands,safe,pnext}.inc + facts.rkt
                                          │
@@ -106,6 +115,7 @@ registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,
 | `vulkan/unsafe` | 已弃用别名（= `vulkan/manual`） | — |
 | `vulkan/safe` | 组合层总入口：`check-vk-result` + `vk-create-*`/`vk-destroy-*` + context/callback/pnext/capability/map | 裸命令（靠模块隔离区分） |
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） | 生成逻辑、策略 |
+| `vulkan/version` | 绑定版本/provenance（`vk-binding-version` 等；实现来自 `generated/version.rkt`） | 生成逻辑 |
 | `vulkan-gen/*` | 生成器（构建期，不参与运行期）：`vk-registry`（读 XML + 闭包）/ `extension-select`（common/all）/ `constants` / `ctype` / `facts-build` / `emit-*` / `classify` / `main` | 运行期依赖 |
 | `vulkan`（main） | facade：挑选/重命名导出 | 逻辑 |
 
@@ -625,3 +635,5 @@ base/memory **没有模块级可变全局**；需要「默认/共享」的状态
 | N7 ✅ | 生成默认对齐提交配方（`VK_VERSION_1_4` + `common`，no-arg 可复现 `generated/`）；`#f` 哨兵区分“未给”与“显式空”；打印生效参数；新增 Racket 构建脚本 `rebuild.rkt [vk.xml]` | generate |
 | N8 ✅ | 常量解析补齐：`~N` 位取反（含 `~1U`/`~2U`）+ 字符串枚举值（`VK_*_EXTENSION_NAME` → bytes）；`tests/constants.rkt` | generate |
 | N9 ✅ | 资源/生成器/目标分层：`vulkan/generator/`→`vulkan-gen/` 集合、`vulkan/registry/`→`registry/`、审计产物→`vulkan-gen/audit/`、`vulkan/experiments/`→`experiments/`；生成器 CLI 合入 `vulkan-gen/main.rkt`；运行期公共路径不变 | 全部 |
+| N10 ✅ | 资源获取标准化：`fetch-registry.rkt <version>`（Khronos tag → `registry/vk-<version>.xml` + 版本自检 + 原子写入）；`rebuild.rkt` 缺默认 xml 时自动拉取 | 资源 |
+| N11 ✅ | 版本管理基础：包版本 = Vulkan header（`info.rkt` `1.4.363`）；生成 `vulkan/generated/version.rkt`（binding/registry/feature/extensions provenance）；`tests/version.rkt` 锁定一致；不加版本目录 | 全部 |

@@ -105,5 +105,10 @@
 (check-alias-commands)
 (check-runtime-aliases)
 
+;; 生成器清理重命名后的残留（如 api.rkt），但不碰未知文件
+(call-with-output-file (build-path out "api.rkt") #:exists 'replace (λ (o) (display "stale" o)))
+(run-generator!)
+(check-false (file-exists? (build-path out "api.rkt")) "stale api.rkt must be pruned")
+
 (delete-directory/files out)
 (printf "generate-aliases: all checks passed\n")

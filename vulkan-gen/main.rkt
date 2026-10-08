@@ -31,6 +31,7 @@
          "emit-types.rkt"
          "emit-commands.rkt"
          "emit-api.rkt"
+         "emit-version.rkt"
          "emit-pnext.rkt"
          "emit-safe.rkt")
 
@@ -147,6 +148,13 @@
   ;; generated/facts.rkt（IR 数据；结构体定义在 vulkan/api-facts.rkt）
   (write-facts-module api-command-list (out-file "facts.rkt"))
 
+  ;; generated/version.rkt（版本 + provenance）
+  (write-version-module (out-file "version.rkt")
+                        #:binding-version (registry-version reg)
+                        #:registry-file (path->string (file-name-from-path in-file))
+                        #:feature target-feature
+                        #:extensions ext-closure)
+
   ;; ABI 对照 C 程序（仅 core struct/union；本机头文件版本可能较 registry 旧，
   ;; 但 core 类型在 1.4.x 内稳定）
   (define (emit-abi-c path)
@@ -179,6 +187,22 @@
      (eprintf "unknown types (~a -> _pointer): ~a\n" (length unknowns) unknowns)
      (when (getenv "VULKAN_GEN_STRICT")
        (error 'generate "unknown types encountered (VULKAN_GEN_STRICT=1)"))])
+
+  ;; 5. 清理：删掉本目录里「生成器曾产出、本次不再产出」的文件
+  ;;    （重命名/移除的残留，如 api.rkt -> facts.rkt、审计文件从 out-dir 移出）。
+  ;;    只碰已知名字，绝不碰 compiled/ 或未知文件。
+  (define out-files '("constants.inc" "types.inc" "commands.inc" "safe.inc"
+                      "pnext.inc" "facts.rkt" "version.rkt"))
+  (define audit-files '("abi_check.c" "unknown-types.txt"))
+  (define (prune! dir current known)
+    (for ([f (in-list (directory-list dir))])
+      (define name (path->string f))
+      (when (and (member name known) (not (member name current)))
+        (delete-file (build-path dir f))
+        (eprintf "pruned stale: ~a\n" (build-path dir f)))))
+  (unless (equal? (simplify-path out-root) (simplify-path audit-root))
+    (prune! out-root out-files (append out-files '("api.rkt" "abi_check.c" "unknown-types.txt")))
+    (prune! audit-root audit-files audit-files))
 
   (eprintf "generated: constants=~a types=~a commands=~a safe=~a api=~a pnext=~a abi=~a -> ~a\n"
            (length constants) (length type-form-list) (length command-form-list)

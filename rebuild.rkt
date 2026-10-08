@@ -4,23 +4,31 @@
 ;;
 ;;   racket rebuild.rkt [vk.xml]
 ;;
-;; 只需指定注册表 XML 路径（省略则用 registry/vk-1.4.363.xml）。
-;; feature / 扩展 / 输出目录用 vulkan-gen/main 的默认配方：
-;;   VK_VERSION_1_4 + common -> vulkan/generated（= 仓库提交的绑定）；
-;;   审计产物 -> vulkan-gen/audit。
+;; 省略 xml 用默认配方（= 仓库提交的绑定）：
+;;   registry/vk-1.4.363.xml -> vulkan/generated  VK_VERSION_1_4  common
+;; registry 文件缺失时按默认版本自动拉取（fetch-registry.rkt），
+;; 所以全新 clone 直接 `racket rebuild.rkt` 即可。
 ;;
-;; 流程：生成 -> 清旧 .zo -> raco make。想换 feature/扩展组合用
-;; `racket vulkan-gen/main.rkt` 带全部参数。
+;; 流程：生成 -> 清旧 .zo -> raco make。想换版本/扩展组合：
+;;   racket fetch-registry.rkt <version>     # 先取资源
+;;   racket vulkan-gen/main.rkt <xml> <out> <feature> <ext>
 ;; ============================================================
 
 (require racket/file
          racket/path
          racket/system
-         racket/runtime-path)
+         racket/runtime-path
+         "fetch-registry.rkt")
 
 (define-runtime-path here-raw ".")
 (define here (simplify-path here-raw))
-(define default-xml (build-path here "registry" "vk-1.4.363.xml"))
+;; 包版本（info.rkt）= 默认注册表版本，单一来源。
+(define (package-version)
+  (define m (regexp-match #px"\\(define version \"([^\"]+)\""
+                          (file->string (build-path here "info.rkt"))))
+  (and m (cadr m)))
+(define default-version (or (package-version) "1.4.363"))
+(define default-xml (build-path here "registry" (string-append "vk-" default-version ".xml")))
 (define out-dir (build-path here "vulkan" "generated"))
 
 (module+ main
@@ -33,6 +41,14 @@
   (define xml (if (>= (vector-length args) 1)
                   (path->complete-path (vector-ref args 0) (current-directory))
                   default-xml))
+
+  ;; 0. 资源缺失则按默认版本拉取
+  (cond
+    [(file-exists? xml) (void)]
+    [(equal? xml default-xml)
+     (eprintf "registry 缺失，按默认版本拉取 ~a ...\n" default-version)
+     (fetch-registry! default-version #:out (build-path here "registry"))]
+    [else (error 'rebuild "找不到 registry：~a" xml)])
 
   ;; 1. 生成（feature/扩展/audit 走默认）
   (generate! #:in-xml xml #:out-dir out-dir)

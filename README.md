@@ -14,6 +14,7 @@ OpenGL 绑定（`racket/opengl` 的 `readspec.rkt` + `main.rkt`）。
 racket-vulkan/
   info.rkt                    # 多集合包元数据（collection 'multi）
   rebuild.rkt                 # 构建脚本：racket rebuild.rkt [vk.xml]（生成 + raco make）
+  fetch-registry.rkt          # 资源脚本：racket fetch-registry.rkt <version>（按版本拉 vk.xml）
   vulkan/                     # 集合 vulkan：运行期绑定（最终目标）
     info.rkt
     main.rkt                  # (require vulkan)           => facade：糖 + 类型/常量/原子 + raw: 裸命令
@@ -33,6 +34,7 @@ racket-vulkan/
     unsafe.rkt                # (require vulkan/unsafe)    => 已弃用别名（= manual）
     safe.rkt                  # (require vulkan/safe)      => 组合层总入口（原生名，不导出裸命令）
     glfw.rkt                  # (require vulkan/glfw)      => GLFW 窗口（与绑定无关）
+    version.rkt               # (require vulkan/version)   => 绑定版本/provenance（vk-binding-version 等）
     generated/                # 生成物（运行期需要；不要手改）
       constants.inc           # VK_* 常量（整数）
       types.inc               # _VkX ctype / define-cstruct
@@ -40,6 +42,7 @@ racket-vulkan/
       safe.inc                # 糖：vk-create-*/vk-get-*/vk-cmd-*（R1 返回值，含 check-vk-result）
       pnext.inc               # vk-struct-sType / vk-pNext-setters 表
       facts.rkt               # 命令/参数事实（vk-command/vk-param），供组合层/测试消费
+      version.rkt             # 绑定版本/provenance（vk-binding-version 等）
   vulkan-gen/                 # 集合 vulkan-gen：生成器（构建期，不参与运行期）
     info.rkt
     main.rkt                  # generate! + CLI（racket vulkan-gen/main.rkt [args]）
@@ -92,6 +95,7 @@ racket-vulkan/
     capability.rkt            # vk-proc-available? + 扩展枚举 + unavailable 异常
     map.rkt                   # 设备内存 map/unmap（写读回验证）
     context.rkt               # 状态分层：context 共享 / 线程隔离 / vk-use-* 同步
+    version.rkt               # 包版本 == 生成物版本 == registry 版本
     comp.spv                  # 预编译 SPIR-V（Mandelbrot，来自参考实现）
   README.md
   ARCHITECTURE.md             # 分层、GC/所有权冲突、假设与“重新考虑触发条件”
@@ -119,6 +123,7 @@ racket-vulkan/
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） |
 | `vulkan/generated/facts` | 命令/参数事实数据（`vk-command-facts`），供组合层/测试消费 |
 | `vulkan-gen/*` | 生成器（构建期，不参与运行期）：`vk-registry`/`extension-select`/`constants`/`ctype`/`facts-build`/`emit-*`/`classify`/`main` |
+| `vulkan/version` | 绑定版本/provenance（`vk-binding-version`/`vk-registry-file`/`vk-generated-feature`/`vk-generated-extensions`） |
 | `vulkan/glfw` | GLFW 窗口，与绑定无关 |
 
 > **命名靠模块隔离（方案 A）**：`vulkan/safe` 的 `vkCreateBuffer` 是糖（builder），
@@ -126,6 +131,41 @@ racket-vulkan/
 > `(require vulkan)` 默认给糖（原生名），裸命令是 `raw:vkCreateBuffer`；
 > 想看裸命令就 `(require vulkan/raw)`。不需要任何命名前缀约定。
 > 运行期符号的词表（arena/handle/param 等）见 `ARCHITECTURE.md` §2.2。
+
+## 获取资源（vk.xml）
+
+注册表按**版本**从 Khronos 官方仓库拉取，命名统一为 `registry/vk-<version>.xml`：
+
+```bash
+racket fetch-registry.rkt 1.4.363     # -> registry/vk-1.4.363.xml（tag v1.4.363）
+racket fetch-registry.rkt main         # -> registry/vk-main.xml（上游 main）
+racket fetch-registry.rkt --check registry/vk-1.4.363.xml 1.4.363   # 只校验已有文件
+```
+
+- 默认来源：`https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/<ref>/xml/vk.xml`；
+  `X.Y.Z` → `ref=vX.Y.Z`，`main` → `main`。
+- 拉取后自检：可解析、根元素 `<registry>`、`VK_HEADER_VERSION`/`VK_HEADER_VERSION_COMPLETE` 与请求版本一致，再原子写入。
+- 选项：`--out <dir>`（默认 `registry/`）、`--url <模板>`（覆盖来源，支持本地路径/镜像）、`--force`（覆盖）。
+- `racket rebuild.rkt` 在默认 xml 缺失时会**自动拉取** `1.4.363`，所以全新 clone 直接构建即可。
+
+## 版本管理
+
+- **包版本 = Vulkan header 版本**：`info.rkt` 的 `version` 即钉死的注册表版本（当前 `1.4.363`）。
+  自己修 bug、不动上游时用第 4 位：`1.4.363.1`（Racket 版本格式不允许以 `.0` 结尾）。
+  下游可写 `deps (list "racket-vulkan" "1.4.363")` 约束最低版本。
+- **生成物 provenance**：生成器写 `vulkan/generated/version.rkt`，运行期可自省：
+
+  ```racket
+  (require vulkan)
+  vk-binding-version       ; "1.4.363"
+  vk-registry-file         ; "vk-1.4.363.xml"
+  vk-generated-feature     ; "VK_VERSION_1_4"
+  vk-generated-extensions  ; '("VK_KHR_surface" …)
+  ```
+
+- `tests/version.rkt` 锁定三者一致：`info.rkt` 版本 == `vk-binding-version` == 注册表版本。
+- **不给 `generated/` 加版本目录**：一次安装只有一套生效绑定，版本是元数据不是命名空间；
+  真要同时支持多 API 版本，用 `vulkan/1-0`、`vulkan/1-4` 这类命名空间另议。
 
 ## 生成绑定
 
@@ -156,6 +196,8 @@ racket vulkan-gen/main.rkt
 > 否则可能仍加载旧绑定（表现为新命令/类型 “unbound identifier”）。
 
 参数：`<vk.xml> <out-dir> <feature> [扩展] [audit-dir]`。
+
+- 生成后会**清理已知陈旧产物**（如重命名前的 `api.rkt`、从 out-dir 移出的审计文件），只碰已知名字，不动 `compiled/` 或其它文件。
 
 - 第 4 个参数是扩展选择：`common`（常用集）/ `all`（所有 includable）/ 逗号分隔名单 / 空。
 - 第 5 个参数是审计产物目录（默认 `vulkan-gen/audit/`）。

@@ -14,7 +14,9 @@
 ;; ============================================================
 
 (require "safe.rkt"
-         (prefix-in raw: "commands.rkt"))
+         (prefix-in raw: "commands.rkt")
+         "version.rkt")
 
 (provide (all-from-out "safe.rkt")      ; 糖 + base(类型/常量) + memory + support/callback/pnext/capability
-         (all-from-out "commands.rkt")) ; 导入时已带 raw: 前缀，故导出 raw:*
+         (all-from-out "commands.rkt") ; 导入时已带 raw: 前缀，故导出 raw:*
+         (all-from-out "version.rkt")) ; vk-binding-version 等

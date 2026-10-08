@@ -64,6 +64,13 @@
 (check-true (has? consts "VK_KHR_SURFACE_EXTENSION_NAME #\"VK_KHR_surface\""))
 (check-true (has? consts "VK_EXT_DEBUG_UTILS_EXTENSION_NAME #\"VK_EXT_debug_utils\""))
 
+;; 3c. version.rkt provenance
+(check-true (file-exists? (build-path out "version.rkt")))
+(define ver (file->lines (build-path out "version.rkt")))
+(check-true (has? ver "(define vk-binding-version \"1.4.363\")"))
+(check-true (has? ver "(define vk-generated-feature \"VK_VERSION_1_4\")"))
+(check-true (has? ver "VK_KHR_surface"))
+
 ;; 4. 不允许退化占位结构体
 (check-equal? (filter (λ (l) (string-contains? l "_dummy")) types) '())
 
