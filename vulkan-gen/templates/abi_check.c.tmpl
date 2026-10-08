@@ -1,0 +1,7 @@
+#include <vulkan/vulkan.h>
+#include <stddef.h>
+#include <stdio.h>
+#define SZ(T) printf("S " #T " %zu %zu\n", sizeof(T), _Alignof(T))
+int main(void){
+@@SZ_LINES@@  return 0;
+}

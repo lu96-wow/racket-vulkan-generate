@@ -1,16 +1,24 @@
 #lang racket/base
 ;; ============================================================
-;; generated/facts.rkt 的数据序列化：vk-command 事实 -> #lang racket/base 模块。
+;; generated/facts.rkt 的**模块体**：vk-command 事实 -> datum 列表。
 ;;
-;; commands.inc 的形式生成在 emit-commands.rkt；本模块只管运行期事实数据。
+;; 模块三部分（依赖 / 模块体 / 导出）由 module.rkt 描述；把 datum 包成
+;; `(define vk-command-facts (list ...))` 的写出属于「逻辑输出」，
+;; 见 render-facts（与旧产物逐字节一致）。
 ;; ============================================================
 
-(require vulkan/api-facts)
+(require racket/runtime-path
+         vulkan/api-facts
+         "module.rkt"
+         "template.rkt")
+
+(define-runtime-path facts-template "templates/facts.rkt.tmpl")
 
 (provide command->datum
-         write-facts-module)
+         facts-module
+         render-facts)
 
-;; vk-command -> 可写出的 datum（写进 generated/facts.rkt）
+;; vk-command -> 可写出的 datum
 (define (command->datum c)
   `(vk-command ',(vk-command-name c) ',(vk-command-level c)
                ,(vk-command-result? c)
@@ -24,14 +32,20 @@
                             (vk-command-params c)))
                ',(vk-command-count-field c)))
 
-(define (write-facts-module commands path)
-  (call-with-output-file path #:exists 'replace
-    (λ (o)
-      (display "#lang racket/base\n" o)
-      (display ";; 自动生成（vulkan-gen）：命令/参数事实，供组合层与测试消费。不要手改。\n" o)
-      (display "(require vulkan/api-facts)\n" o)
-      (display "(provide (all-from-out vulkan/api-facts) vk-command-facts)\n\n" o)
-      (display "(define vk-command-facts\n  (list\n" o)
-      (for ([c (in-list commands)])
-        (display "    " o) (write (command->datum c) o) (newline o))
-      (display "))\n" o))))
+;; 依赖：运行期 IR 结构体；导出：IR 结构体 + 事实表；模块体：命令 datum 列表。
+(define (facts-module commands)
+  (make-module
+   #:deps '(vulkan/api-facts)
+   #:exports '((all-from-out vulkan/api-facts) vk-command-facts)
+   (map command->datum commands)))
+
+;; 输出：完整模块（事实表按命令一行一个 datum，避免超长行；骨架来自模板文件）。
+(define (render-facts mod port)
+  (define datums
+    (let ([o (open-output-string)])
+      (for ([c (in-list (vk-module-body mod))])
+        (display "    " o) (write c o) (newline o))
+      (get-output-string o)))
+  (display (fill-template (read-template facts-template)
+                          (list (cons "DATUMS" datums)))
+           port))

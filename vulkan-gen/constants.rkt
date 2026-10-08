@@ -8,7 +8,7 @@
          "xexpr.rkt"
          "vk-registry.rkt")
 
-(provide ordered-constants)
+(provide parsed-constants constant-forms ordered-constants)
 
 (define (mask-of bits) (- (arithmetic-shift 1 bits) 1))
 (define (strip-parens s)
@@ -55,7 +55,10 @@
      (if (equal? (attr e 'dir #f) "-") (- v) v)]
     [else #f]))
 
-(define (ordered-constants reg closure ext-enums)
+;; --- 解析：常量名 -> 值（整数/浮点/bytes，或 alias 的符号）---
+;; 返回按「可复现顺序」排好的 (name . valexpr) 列表：literal 先按名字排序，
+;; 依赖其他常量的 alias 再按轮次补齐。生成阶段只做 (define ...) 包装。
+(define (parsed-constants reg closure ext-enums)
   ;; name -> valexpr（整数/浮点，或 alias 的符号）
   (define constant-map (make-hasheqv))
   (define (put! name valexpr)
@@ -91,14 +94,14 @@
 
   ;; 常量按依赖（alias）排序后输出
   (define emitted (make-hasheqv))
-  (define out '())
+  (define out '())                     ; (name . valexpr)
   (define (literal? v) (not (symbol? v)))
   (define (names) (sort (hash-keys constant-map) (λ (a b) (string<? (symbol->string a) (symbol->string b)))))
   (for ([nm (names)])
     (define v (hash-ref constant-map nm))
     (when (literal? v)
       (hash-set! emitted nm #t)
-      (set! out (cons `(define ,nm ,v) out))))
+      (set! out (cons (cons nm v) out))))
   ;; 反复处理 alias，直到不再前进
   (let loop ()
     (define progressed #f)
@@ -107,7 +110,13 @@
         (define v (hash-ref constant-map nm))
         (when (and (symbol? v) (hash-has-key? emitted v))
           (hash-set! emitted nm #t)
-          (set! out (cons `(define ,nm ,v) out))
+          (set! out (cons (cons nm v) out))
           (set! progressed #t))))
     (when progressed (loop)))
   (reverse out))
+
+(define (constant-forms pairs)
+  (for/list ([p (in-list pairs)]) `(define ,(car p) ,(cdr p))))
+
+(define (ordered-constants reg closure ext-enums)
+  (constant-forms (parsed-constants reg closure ext-enums)))

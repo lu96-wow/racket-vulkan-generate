@@ -1,0 +1,12 @@
+#lang racket/base
+(require ffi/unsafe racket/include)
+(include "constants.inc")
+(include "types.inc")
+(define sz (ctype-sizeof _VkAccelerationStructureInstanceKHR))
+(define mem (malloc 'atomic-interior sz))
+(memset mem 0 sz)
+(define p (ptr-ref mem _VkAccelerationStructureInstanceKHR))
+(set-VkAccelerationStructureInstanceKHR-instanceCustomIndex! p #xABCDEF)
+(set-VkAccelerationStructureInstanceKHR-mask! p #x5A)
+(set-VkAccelerationStructureInstanceKHR-flags! p #xF)
+(printf "size=~a align=~a transform=~a bits0=#x~x bits1=#x~x custom=#x~x mask=#x~x flags=#x~x\n" sz (ctype-alignof _VkAccelerationStructureInstanceKHR) (ctype-sizeof _VkTransformMatrixKHR) (VkAccelerationStructureInstanceKHR-_bits0 p) (VkAccelerationStructureInstanceKHR-_bits1 p) (VkAccelerationStructureInstanceKHR-instanceCustomIndex p) (VkAccelerationStructureInstanceKHR-mask p) (VkAccelerationStructureInstanceKHR-flags p))

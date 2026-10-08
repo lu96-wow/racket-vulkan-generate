@@ -15,7 +15,7 @@
 ## 运行依赖旧 vk11 collection 的脚本
 
 ```bash
-cd /home/lu96/Desktop/work/racket-vulkan/vulkan/experiments
+cd /home/lu96/Desktop/work/racket-vulkan/experiments
 PLTCOLLECTS="$PWD/vk11-collection:" racket 04-dispatch.rkt
 PLTCOLLECTS="$PWD/vk11-collection:" racket 05-nonexported-ext.rkt
 PLTCOLLECTS="$PWD/vk11-collection:" racket mandelbrot-vk11/mandelbrot.rkt

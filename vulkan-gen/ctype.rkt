@@ -10,7 +10,7 @@
          "vk-registry.rkt")
 
 (provide base-ctype basetype-map platform-ctype
-         base-c-type-name category-of ctype-of-type-name
+         base-c-type-name category-of type-category ctype-of-type-name
          member-name members-of member-type-text member-signature member-text
          pointer-member? array-member? array-dims bitfield-member? bitfield-width
          member-base-name member-ctype-expr
@@ -68,6 +68,12 @@
   (define ty (hash-ref (registry-types-hash reg)
                        (if (symbol? nm) nm (string->symbol nm)) #f))
   (and ty (cat-of ty)))
+
+;; 生成分类用的规范类别：带 alias 的类型单独归为 'alias（alias 目标单独定义）。
+(define (type-category reg nm)
+  (define ty (hash-ref (registry-types-hash reg)
+                       (if (symbol? nm) nm (string->symbol nm)) #f))
+  (and ty (if (attr ty 'alias #f) 'alias (cat-of ty))))
 
 ;; ------------------------------------------------------------------
 ;; 未知类型审计：ctype-of-type-name 退化成 _pointer 时**通过回调上报**，

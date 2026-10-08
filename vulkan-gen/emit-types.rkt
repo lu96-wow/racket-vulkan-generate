@@ -9,7 +9,7 @@
          "vk-registry.rkt"
          "ctype.rkt")
 
-(provide type-forms)
+(provide type-forms type-forms-of)
 
 (define (handle->form nm)
   `(define ,(string->symbol (format "_~a" nm))
@@ -105,3 +105,10 @@
 
 (define (type-forms reg sorted-types)
   (append* (for/list ([nm (in-list sorted-types)]) (type-form reg nm))))
+
+;; 只取指定类别的类型形式（生成层按 枚举/结构体 等分类时用）。
+;; 注意 types.inc 必须保持依赖顺序，所以整表仍走 type-forms。
+(define (type-forms-of reg sorted-types cats)
+  (append* (for/list ([nm (in-list sorted-types)]
+                      #:when (memq (type-category reg nm) cats))
+             (type-form reg nm))))

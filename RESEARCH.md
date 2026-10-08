@@ -556,7 +556,7 @@ Racket FFI 文档也提醒：阻塞式 foreign call 期间可能发生 GC，因�
   自动跳过 `provisional` / `supported=disabled`。
 - 当前纳入 10 个常用扩展（surface / swapchain / xlib / xcb / wayland / display /
   headless_surface / debug_utils / get_physical_device_properties2 / get_surface_capabilities2）。
-- 规模：**280 命令 / 652 类型 / 2202 常量 / 65 安全封装**，`unsafe.rkt` 编译 ~25s。
+- 规模：**280 命令 / 652 类型 / 2224 常量 / 127 安全封装**，`unsafe.rkt` 编译 ~25s。
 
 过程中修的两个真实生成器 bug：
 

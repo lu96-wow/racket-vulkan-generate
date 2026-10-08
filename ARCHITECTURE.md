@@ -21,7 +21,7 @@
 Racket 的 `'atomic-interior` 只解决**移动**，不解决**回收**：内存即使不移动，
 一旦 Racket 侧不可达也会被 GC 掉。所以必须额外维护「可达性」。
 
-其余所有设计（arena、retain/release、`vk-malloc`、builder 约定、safe 包装）
+其余所有设计（arena、handle↔arena、`vk-malloc`、builder 约定、safe 包装）
 都只是这条约束的推论。
 
 Vulkan 对 host 内存的持有方式（决定需要多长的生命周期）：
@@ -45,7 +45,7 @@ Vulkan 对 host 内存的持有方式（决定需要多长的生命周期）：
 | R5 | 内存不可移动、生命周期正确 | **策略** | memory + safe |
 | R6 | 错误处理 | **策略** | safe |
 | R7 | 易用性（create/destroy、输出参数、pNext、回调、指针类型化） | **策略/组合** | safe |
-| R8 | 窗口/平台 | 独立 | window |
+| R8 | 窗口/平台 | 独立 | glfw |
 
 分水岭：**R1–R4 是"绑定事实"，R5–R7 是"使用策略"**。事实层不决定策略。
 
@@ -91,7 +91,7 @@ registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,
             vulkan/manual.rkt   vulkan/safe.rkt
             （手动 = bindings    （组合层：context（缓存/arena 注册表）+
               + memory；           result（错误/枚举）+ callback / pnext /
-               unsafe = 别名）       capability / map + vk-create-* 糖）
+               unsafe = 别名）       capability / map + vkCreate* 糖）
                      │              │
                      └──────┬───────┘
                             ▼
@@ -113,10 +113,10 @@ registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,
 | `vulkan/map` | 设备内存映射薄封装（`vk-map` / `vk-unmap`） | GC 接管、所有权 |
 | `vulkan/manual` | 手动模式 = `bindings` + `memory`（裸命令 + arena） | 错误策略、create 包装 |
 | `vulkan/unsafe` | 已弃用别名（= `vulkan/manual`） | — |
-| `vulkan/safe` | 组合层总入口：`check-vk-result` + `vk-create-*`/`vk-destroy-*` + context/callback/pnext/capability/map | 裸命令（靠模块隔离区分） |
+| `vulkan/safe` | 组合层总入口：`check-vk-result` + `vkCreate*`/`vkDestroy*` 糖 + context/callback/pnext/capability/map | 裸命令（靠模块隔离区分） |
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） | 生成逻辑、策略 |
 | `vulkan/version` | 绑定版本/provenance（`vk-binding-version` 等；实现来自 `generated/version.rkt`） | 生成逻辑 |
-| `vulkan-gen/*` | 生成器（构建期，不参与运行期）：`vk-registry`（读 XML + 闭包）/ `extension-select`（common/all）/ `constants` / `ctype` / `facts-build` / `emit-*` / `classify` / `main` | 运行期依赖 |
+| `vulkan-gen/*` | 生成器（构建期，不参与运行期）：解析 `parse`（`vk-registry`/`extension-select`/`constants`/`ctype`/`facts-build`）→ 生成 `generate`（`emit-*`/`classify`/`module`）→ 输出 `main`；模块骨架/ABI C 模板在 `templates/`（`template` 加载） | 运行期依赖 |
 | `vulkan`（main） | facade：挑选/重命名导出 | 逻辑 |
 
 依赖方向单向、无环。
@@ -206,10 +206,10 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 | platform 类型表、basetype 映射 | | ✅（生成器输入） | bindings |
 | version 宏、libvulkan、GIPA/GDPA | | ✅ | bindings |
 | VkResult 名字表（纯数据） | | ✅ | bindings |
-| arena、`vk-malloc`、retain/release | | ✅ | memory |
+| arena、`vk-malloc`、handle↔arena | | ✅ | memory |
 | safe create/destroy 包装 | ✅ | | safe |
 | 错误抛出、输出参数、pNext、回调 | | ✅ | safe |
-| 窗口/GLFW | | ✅ | window |
+| 窗口/GLFW | | ✅ | glfw |
 
 原则：**生成器只产出事实**（布局、签名、别名、分派级别）；**策略由手写组合层承担**。
 唯一的例外是 `types.inc` 的 `#:malloc-mode 'zeroed-atomic-interior`——它被视为绑定层的
@@ -322,7 +322,7 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 
 覆盖场景 1–6（见 6.4），**只包它自己分配的内存**：
 
-- `vk-create-*` / `vk-allocate-*` → **对象作用域**（原语组合）
+- `vkCreate*` / `vkAllocate*` → **对象作用域**（原语组合）
 - **每条非 create 包装默认自开一个调用作用域**（1a）→ 单条命令一定安全
 - `with-vk-call`（1b，safe 层策略别名）→ 多条命令共享一个调用作用域
 - `with-vk-frame` / `vk-arena-reset!` → 可复用的**帧作用域**，解决 B4 过度保留
@@ -362,7 +362,8 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 `vulkan/generated/facts.rkt`），供自动层与测试消费：
 
 - 命令：`name` / `level` / `result?` / `dispatch`
-- 参数：`name` / `base` / `pointer?` / `const?` / `count?` / `kind` / `output?`（启发式）
+- 参数：`name` / `base` / `pointer?` / `const?` / `count?` / `kind` / `output?`（启发式）/
+  `flat?`（struct/union 是否无指针成员，可机械推导）
 
 事实里 **pointer/const/count/kind 可机械推导**；`output?` 是启发式；
 **retention 不在此层**——自动策略按调用类（create/其他）决定，手动处理例外。
@@ -387,7 +388,7 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 3. 只对“干净形状”的命令生成糖；其余一律裸命令（宁缺勿滥）。
 4. 错误：负值抛异常（`check-vk-result`）。
 
-**分类（非 create 命令，基于 `api.rkt` 事实）**
+**分类（非 create 命令，基于 `generated/facts.rkt` 事实）**
 
 设 `counts` = `count?` 参数（in/out 计数，单独处理）；
 `outs` = `output?` 且**非** `count?` 的参数；
@@ -476,20 +477,35 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 - `tests/safe-input.rkt`：单 struct、数组（count 由长度定）、作用域释放。
 - 扩展 `api-facts`：断言分类选择（哪些命令会有糖）。
 
-### 6.9 生成器流水线：事实 → 分类 → 计划 → 逐形状生成 → 组合
+### 6.9 生成器流水线：解析 → 生成 → 输出（模块三部分）
 
-把生成逻辑拆成可独立测试的局部片段，最后组合（避免一个巨型 `cond`）：
+把生成逻辑拆成可独立测试的局部片段，最后组合（避免一个巨型 `cond`）。整体两段：
+**解析**（`parse.rkt`：XML 事实 → `vk-model`）与 **生成**（`generate.rkt`：`vk-model`
+→ `vk-artifact`）；写出（文件 / 审计 / 清理）在 driver `main.rkt`。领域按
+**预定义常量 / 枚举 / 结构体 / 函数** 四类拆开：
 
 ```
-XML ─vk-registry─▶ facts-build ─▶ vk-command ─classify─▶ (shape . plan)
-                                         ─emit-<shape>─▶ forms ─compose─▶ safe.inc
+vk.xml ─parse──▶ vk-model{constants, enums, structs, other-types, commands}
+              │
+ generate ────┼─ generate-constants ─┐
+              ├─ generate-enums      │  modules（deps / body / exports）
+              ├─ generate-structs    ├─▶ vk-artifact ─▶ 写出（.inc 模块体 / 完整模块）
+              ├─ generate-functions ─┘
+              └─ generate-types（按拓扑序交错 -> types.inc）
 ```
+
+目标 Racket 模块统一建模为三部分 `vk-module`（`module.rkt`）：**模块依赖 deps /
+模块体 body / 导出 exports**。生成层只产出 body；deps/exports 是元数据，由
+`vk-artifact` 的 render 承担“逻辑输出”（`.inc` 只写 body，`.rkt` 写完整模块）。
+模板程序（模块骨架 / ABI 对照 C）外置在 `vulkan-gen/templates/`，由 `template.rkt`
+加载替换，不嵌进 Racket 代码。
 
 模块：`xexpr`（XML 工具）/ `vk-registry`（读 XML + feature/extension 闭包）/
-`extension-select`（扩展选择）/ `constants`（常量）/ `ctype`（类型映射 + 成员）/
-`facts-build`（XML→IR）/ `emit-types`、`emit-commands`、`emit-api`、`emit-pnext`（各产出）/
-`classify` + `emit-safe`（safe.inc）。`vulkan-gen/main.rkt` 做参数闭包/拓扑排序/写文件；
-CLI 是它的 `module+ main`（`racket vulkan-gen/main.rkt [args]`）。
+`extension-select`（扩展选择）/ `constants`（常量解析 + 形式）/ `ctype`（类型映射 +
+成员 + 分类）/ `facts-build`（XML→IR）→ `parse`；`emit-types`、`emit-commands`、
+`emit-api`、`emit-pnext`、`emit-version`、`classify` + `emit-safe` + `module` → `generate`；
+`templates/` + `template`（模板）。`vulkan-gen/main.rkt` 只做 driver，CLI 是它的
+`module+ main`（`racket vulkan-gen/main.rkt [args]`）。
 
 **1) 分类（纯函数）**：`(classify cmd) -> (values shape plan)`。
 固定枚举的 shape（固定签名匹配，按表顺序先到先得）：
@@ -519,7 +535,7 @@ CLI 是它的 `module+ main`（`racket vulkan-gen/main.rkt [args]`）。
 
 **4) 组合 driver**：按 `wanted-cmds` 顺序 classify → 查 emitter 表 → 收集 forms。
 
-**好处**：分类是纯函数，可对 `api.rkt` 全量断言；每个 emitter 独立可测；
+**好处**：分类是纯函数，可对 `generated/facts.rkt` 全量断言；每个 emitter 独立可测；
 新增形状不动已有 emitter；create/destroy 也统一进这套流程，取代散落的 `safe-create-form` 分支。
 
 **测试**：`tests/gen-shapes.rkt` —— 对全量命令跑 classify，断言：
@@ -625,7 +641,6 @@ base/memory **没有模块级可变全局**；需要「默认/共享」的状态
 | E1/E3 ✅ | 扩展选择 `common`/`all` + 未知类型审计（bitfield/multi-dim 前置已修） | generate |
 | F1 ✅ | capability 门控：`vk-proc-available?` + 扩展枚举 + 可捕获的 unavailable 异常 | safe + base |
 | D6 ✅ | pNext/sType 糖：`vk-struct` / `vk-chain!` + 生成 `pnext.inc` | safe + generate |
-| E1/E3 | 扩展覆盖 + bitfield（G1） | generate |
 | N1 ✅ | 命名收敛（词表 + 分层回归）：§2.2；IR 出 `generator/`、策略归 safe、枚举去伪结果 | 全部 |
 | N2 ✅ | 公开名收敛（`vk-use-*`/`current-vk-*`/`manual`/window）+ `gen/`→`generator/` + shape 词表 | 全部 |
 | N3 ✅ | `generate.rkt` 拆为 vk-registry/constants/ctype/facts-build/emit-*（输出逐字节不变） | generate |

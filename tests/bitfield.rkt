@@ -19,6 +19,8 @@
          racket/runtime-path)
 
 (define-runtime-path here ".")
+(define-runtime-path probe-template "templates/bitfield-probe.rkt.tmpl")
+(define-runtime-path check-template "templates/bitfield-check.c.tmpl")
 (define project-root (simplify-path (build-path here "..")))
 (define gen (build-path project-root "vulkan-gen" "main.rkt"))
 (define reg (build-path project-root "registry" "vk-1.4.363.xml"))
@@ -66,20 +68,9 @@
 (check-false (has? "VkAccelerationStructureInstanceKHR-reserved")
              "reserved bitfields get no accessor")
 
-;; 4. 子进程加载生成的 ctype，检查布局与位域读写
+;; 4. 子进程加载生成的 ctype，检查布局与位域读写（探针程序外置在模板文件）
 (define probe (build-path out "probe.rkt"))
-(call-with-output-file probe #:exists 'replace
-  (λ (o)
-    (display "#lang racket/base\n(require ffi/unsafe racket/include)\n" o)
-    (display "(include \"constants.inc\")\n(include \"types.inc\")\n" o)
-    (display "(define sz (ctype-sizeof _VkAccelerationStructureInstanceKHR))\n" o)
-    (display "(define mem (malloc 'atomic-interior sz))\n" o)
-    (display "(memset mem 0 sz)\n" o)
-    (display "(define p (ptr-ref mem _VkAccelerationStructureInstanceKHR))\n" o)
-    (display "(set-VkAccelerationStructureInstanceKHR-instanceCustomIndex! p #xABCDEF)\n" o)
-    (display "(set-VkAccelerationStructureInstanceKHR-mask! p #x5A)\n" o)
-    (display "(set-VkAccelerationStructureInstanceKHR-flags! p #xF)\n" o)
-    (display "(printf \"size=~a align=~a transform=~a bits0=#x~x bits1=#x~x custom=#x~x mask=#x~x flags=#x~x\\n\" sz (ctype-alignof _VkAccelerationStructureInstanceKHR) (ctype-sizeof _VkTransformMatrixKHR) (VkAccelerationStructureInstanceKHR-_bits0 p) (VkAccelerationStructureInstanceKHR-_bits1 p) (VkAccelerationStructureInstanceKHR-instanceCustomIndex p) (VkAccelerationStructureInstanceKHR-mask p) (VkAccelerationStructureInstanceKHR-flags p))\n" o)))
+(copy-file probe-template probe #t)
 (define-values (pcode pout) (run-capture racket-exe (path->string probe)))
 (check-equal? pcode 0 (format "probe should run: ~a" pout))
 (check-true (string-contains? pout "size=64 align=8 transform=48")
@@ -93,10 +84,7 @@
 (when (and gcc (file-exists? vulkan-h))
   (define c (build-path out "bf.c"))
   (define exe (build-path out "bf"))
-  (call-with-output-file c #:exists 'replace
-    (λ (o)
-      (display "#include <vulkan/vulkan.h>\n#include <stddef.h>\n#include <stdio.h>\n" o)
-      (display "int main(void){printf(\"%zu %zu %zu\\n\", sizeof(VkAccelerationStructureInstanceKHR), _Alignof(VkAccelerationStructureInstanceKHR), sizeof(VkTransformMatrixKHR));return 0;}\n" o)))
+  (copy-file check-template c #t)
   (check-equal? (system*/exit-code gcc (path->string c) "-o" (path->string exe)) 0
                 "gcc compile")
   (define-values (ccode cout) (run-capture (path->string exe)))
