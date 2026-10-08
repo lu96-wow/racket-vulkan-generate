@@ -5,14 +5,14 @@
 ;;   * `vk-proc-available?`（base）：命令能否在当前上下文解析，不抛异常。
 ;;   * 本模块：枚举 instance/device 扩展名，并判断某扩展是否可用。
 ;;
-;; 复用 `vulkan/support` 的 `vk-enumerate-result`（两遍 + VK_INCOMPLETE 重试）。
+;; 复用 `vulkan/result` 的 `vk-enumerate-result`（两遍 + VK_INCOMPLETE 重试）。
 ;; 命令不可用时 `define-vk` 会抛 `exn:fail:vulkan:unavailable`（可捕获）。
 ;; ============================================================
 
 (require ffi/unsafe
          "base.rkt"
          "memory.rkt"
-         "support.rkt"
+         "result.rkt"
          (prefix-in raw: "commands.rkt"))
 
 (provide vk-instance-extension-properties

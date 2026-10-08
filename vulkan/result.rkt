@@ -1,6 +1,6 @@
 #lang racket/base
 ;; ============================================================
-;; 组合层公共支撑：VkResult 错误策略 + 枚举输出。
+;; 结果检查与枚举（vulkan/result）：VkResult 错误策略 + 枚举输出。
 ;;
 ;; 被 vulkan/safe（生成的包装）与 vulkan/capability（扩展查询）共用，
 ;; 避免同一语义在两处各写一份。依赖 base（VkResult 名字）+ memory（分配）。

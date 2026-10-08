@@ -6,7 +6,7 @@
 (require racket/list
          racket/string
          "xexpr.rkt"
-         "registry.rkt")
+         "vk-registry.rkt")
 
 (provide ordered-constants)
 

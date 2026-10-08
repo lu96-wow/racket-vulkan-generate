@@ -7,7 +7,7 @@
 (require racket/list
          racket/string
          "xexpr.rkt"
-         "registry.rkt")
+         "vk-registry.rkt")
 
 (provide base-ctype basetype-map platform-ctype
          base-c-type-name category-of ctype-of-type-name

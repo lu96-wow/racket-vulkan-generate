@@ -15,8 +15,8 @@
          racket/path
          racket/port
          racket/runtime-path
-         vulkan/generator/registry
-         vulkan/generator/extensions)
+         vulkan/generator/vk-registry
+         vulkan/generator/extension-select)
 
 (define-runtime-path here ".")
 (define project-root (simplify-path (build-path here "..")))

@@ -1,10 +1,11 @@
 #lang racket/base
 ;; ============================================================
-;; 组合层（vulkan/safe）：糖。
+;; 组合层总入口（vulkan/safe）：糖 + 错误/枚举 + context/callback/pnext/
+;; capability/map 的组合门面（自动模式；手动模式见 vulkan/manual）。
 ;;
-;; 基于 base（类型/常量）+ commands（原始命令）+ memory（原子）+ support
+;; 基于 base（类型/常量）+ commands（原始命令）+ memory（原子）+ result
 ;; （错误/枚举支撑），提供：
-;;   * 错误策略与枚举：re-export `vulkan/support`（check-vk-result 等）
+;;   * 错误策略与枚举：re-export `vulkan/result`（check-vk-result 等）
 ;;   * with-vk-call：调用作用域（多条命令共享；策略别名）
 ;;   * vk-create-* / vk-allocate-* / vk-destroy-* / vk-free-* 包装
 ;;     （自动对象作用域，见 generated/safe.inc）
@@ -16,7 +17,7 @@
 (require "base.rkt"
          (prefix-in raw: "commands.rkt")   ; safe.inc 里的包装以 raw: 前缀调裸命令
          "memory.rkt"
-         "support.rkt"
+         "result.rkt"
          "context.rkt"
          "callback.rkt"
          "pnext.rkt"
@@ -27,7 +28,7 @@
 
 (provide (all-from-out "base.rkt")
          (all-from-out "memory.rkt")
-         (all-from-out "support.rkt")
+         (all-from-out "result.rkt")
          (all-from-out "context.rkt")
          (all-from-out "callback.rkt")
          (all-from-out "pnext.rkt")

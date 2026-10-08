@@ -1,16 +1,16 @@
 #lang racket/base
 ;; ============================================================
-;; 内存 / 所有权原语（R5）——与具体 Vulkan 绑定解耦
+;; 内存 / arena 原语（R5）——与具体 Vulkan 绑定解耦
 ;;
 ;; 规则：凡是交给 Vulkan/驱动的内存都必须是「不可移动」的。
 ;; Racket CS 里普通 'atomic 分配**仍会被 GC 移动**（只有 'atomic-interior
 ;; 保证地址稳定），而驱动可能在调用期间/之后持有这些指针，移动后会段错误。
 ;;
-;; 两个正交轴（命名对应功能）：
-;;   * arena 收集引用：`vk-arena-keep-current!`（挂到当前动态 arena）
-;;     与 `vk-arena-keep!`（显式挂到指定 arena）。
-;;   * handle 绑定 arena：`vk-handle-arena-set!` / `vk-handle-arena-remove!`。
-;; 上层生成的 vk-create-*/vk-allocate-* 把 arena 绑到返回句柄；
+;; 本层只有 arena 一轴：收集引用（`vk-arena-keep-current!` 挂当前动态 arena、
+;; `vk-arena-keep!` 挂指定 arena）+ 分配 + 作用域。
+;; handle↔arena 绑定（`vk-handle-arena-set!` 等）依赖 context 层的
+;; `current-vk-arena-registry`，因此归 vulkan/context，不在本层。
+;; 上层生成的 vk-create-*/vk-allocate-* 由 context 把 arena 绑到返回句柄；
 ;; vk-destroy-*/vk-free-* 解绑。
 ;; ============================================================
 

@@ -1,15 +1,15 @@
 #lang racket/base
 ;; ============================================================
-;; 完整渲染 + 显示（用独立窗口模块 vulkan/window，GLFW）
+;; 完整渲染 + 显示（用独立窗口模块 vulkan/glfw，GLFW）
 ;;
-;; 窗口逻辑在 vulkan/window.rkt（与 Vulkan 绑定解耦）；
+;; 窗口逻辑在 vulkan/glfw.rkt（与 Vulkan 绑定解耦）；
 ;; 本文件只负责 Vulkan：instance/surface/device/swapchain/pipeline/提交/呈现。
 ;;
 ;;   racket test/triangle.rkt           ; 3 帧后退出
 ;;   racket test/triangle.rkt --loop    ; 持续渲染，关窗或 Esc 退出
 ;; ============================================================
 (require vulkan
-         vulkan/window
+         vulkan/glfw
          ffi/unsafe
          ffi/unsafe/define
          racket/port

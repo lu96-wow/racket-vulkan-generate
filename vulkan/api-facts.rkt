@@ -2,7 +2,7 @@
 ;; ============================================================
 ;; 运行期 API 事实 IR：命令/参数结构体（vk-param / vk-command）。
 ;;
-;; 位置说明：本模块是**运行期**契约，被生成物 vulkan/generated/api.rkt 与
+;; 位置说明：本模块是**运行期**契约，被生成物 vulkan/generated/facts.rkt 与
 ;; 生成器 classify/emit 共同依赖，因此放在 vulkan/ 顶层，而不是构建期的
 ;; vulkan/generator/ 目录里。
 ;;

@@ -12,7 +12,7 @@
 (require ffi/unsafe
          "base.rkt"
          "memory.rkt"
-         "support.rkt"
+         "result.rkt"
          (prefix-in raw: "commands.rkt"))
 
 (provide vk-map

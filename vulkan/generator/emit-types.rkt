@@ -6,7 +6,7 @@
 
 (require racket/list
          "xexpr.rkt"
-         "registry.rkt"
+         "vk-registry.rkt"
          "ctype.rkt")
 
 (provide type-forms)

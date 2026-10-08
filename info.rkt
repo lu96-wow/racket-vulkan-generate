@@ -1,6 +1,6 @@
 #lang info
-;; 多集合包：vulkan/ 是绑定集合（main/manual/unsafe/safe/window/generate/generated/registry）。
-;; vulkan/window.rkt 与 vulkan/manual.rkt 解耦，可单独 require。
+;; 多集合包：vulkan/ 是绑定集合（main/manual/unsafe/safe/glfw/generate/generated/registry）。
+;; vulkan/glfw.rkt 与 vulkan/manual.rkt 解耦，可单独 require。
 (define collection 'multi)
 (define deps '("base"))
 (define build-deps '())

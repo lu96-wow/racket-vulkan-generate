@@ -1,16 +1,17 @@
 #lang racket/base
 ;; ============================================================
-;; commands.inc 的形式生成 + generated/api.rkt 的数据序列化。
+;; commands.inc 的形式生成。
+;;
+;; 运行期事实数据（generated/facts.rkt）的序列化在 emit-api.rkt。
 ;; ============================================================
 
 (require racket/list
-         "../api-facts.rkt"
          "xexpr.rkt"
-         "registry.rkt"
+         "vk-registry.rkt"
          "ctype.rkt"
          "facts-build.rkt")
 
-(provide command-forms command->datum)
+(provide command-forms)
 
 ;; alias 命令沿用目标命令的签名（proto/params/level）；基础层只做绑定：
 ;; VkResult 命令直接返回结果值，错误策略在 safe 层。
@@ -33,17 +34,3 @@
                      #:when (and nm (not (member nm skip-commands))))
             (define c (hash-ref (registry-commands-hash reg) (string->symbol nm) #f))
             (and c (command-form reg c)))))
-
-;; vk-command -> 可写出的 datum（写进 generated/api.rkt）
-(define (command->datum c)
-  `(vk-command ',(vk-command-name c) ',(vk-command-level c)
-               ,(vk-command-result? c)
-               ,(vk-command-dispatch c)
-               (list ,@(map (λ (p)
-                              `(vk-param ',(vk-param-name p) ,(vk-param-base p)
-                                         ',(vk-param-ctype p)
-                                         ,(vk-param-pointer? p) ,(vk-param-const? p)
-                                         ,(vk-param-count? p) ',(vk-param-kind p)
-                                         ,(vk-param-output? p) ,(vk-param-flat? p)))
-                            (vk-command-params c)))
-               ',(vk-command-count-field c)))

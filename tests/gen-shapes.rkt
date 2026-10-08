@@ -6,7 +6,7 @@
 (require rackunit
          racket/list
          vulkan/generator/classify
-         vulkan/generated/api)
+         vulkan/generated/facts)
 
 (define (find-cmd name)
   (for/first ([c (in-list vk-command-facts)] #:when (eq? (vk-command-name c) name)) c))

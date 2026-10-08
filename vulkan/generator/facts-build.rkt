@@ -10,7 +10,7 @@
          racket/string
          "../api-facts.rkt"
          "xexpr.rkt"
-         "registry.rkt"
+         "vk-registry.rkt"
          "ctype.rkt")
 
 (provide skip-commands

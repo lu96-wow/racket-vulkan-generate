@@ -1,6 +1,6 @@
 #lang racket/base
 ;; ============================================================
-;; M3.0 防回归：generated/api.rkt 事实层
+;; M3.0 防回归：generated/facts.rkt 事实层
 ;;
 ;; bindings 层产出的命令/参数事实必须与真实绑定（commands.inc）一致，
 ;; 且分类完整（无 unknown），关键命令的 input/output/dispatch 判定正确。
@@ -11,7 +11,7 @@
          racket/string
          racket/list
          racket/runtime-path
-         vulkan/generated/api)
+         vulkan/generated/facts)
 
 (define-runtime-path here ".")
 (define commands-inc (build-path here ".." "vulkan" "generated" "commands.inc"))

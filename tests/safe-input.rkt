@@ -78,4 +78,4 @@
 ;; 裸命令仍可用
 (check-true (procedure? raw:vkCmdSetViewport))
 
-(printf "auto-input: all checks passed\n")
+(printf "safe-input: all checks passed\n")

@@ -12,7 +12,7 @@
 (require racket/list
          racket/string
          "xexpr.rkt"
-         "registry.rkt"
+         "vk-registry.rkt"
          "ctype.rkt")
 
 (provide pnext-forms)

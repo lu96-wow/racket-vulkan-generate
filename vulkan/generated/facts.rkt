@@ -1,5 +1,5 @@
 #lang racket/base
-;; 自动生成（generate.rkt）：命令/参数事实，供组合层与测试消费。不要手改。
+;; 自动生成（vulkan/generator）：命令/参数事实，供组合层与测试消费。不要手改。
 (require vulkan/api-facts)
 (provide (all-from-out vulkan/api-facts) vk-command-facts)
 

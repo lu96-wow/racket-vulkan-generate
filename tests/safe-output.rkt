@@ -57,4 +57,4 @@
 (check-true (procedure? raw:vkGetPhysicalDeviceProperties))
 (check-true (procedure? raw:vkEnumeratePhysicalDevices))
 
-(printf "auto-output: all checks passed\n")
+(printf "safe-output: all checks passed\n")
