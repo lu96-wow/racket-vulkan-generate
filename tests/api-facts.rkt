@@ -2,7 +2,7 @@
 ;; ============================================================
 ;; M3.0 防回归：generated/facts.rkt 事实层
 ;;
-;; bindings 层产出的命令/参数事实必须与真实绑定（commands.inc）一致，
+;; bindings 层产出的命令/参数事实必须与真实绑定（generated/commands.rkt）一致，
 ;; 且分类完整（无 unknown），关键命令的 input/output/dispatch 判定正确。
 ;; ============================================================
 
@@ -14,7 +14,7 @@
          vulkan/generated/facts)
 
 (define-runtime-path here ".")
-(define commands-inc (build-path here ".." "vulkan" "generated" "commands.inc"))
+(define commands-rkt (build-path here ".." "vulkan" "generated" "commands.rkt"))
 
 (define (find-command n)
   (for/first ([c (in-list vk-command-facts)] #:when (eq? (vk-command-name c) n)) c))
@@ -62,8 +62,8 @@
 (define eipd (find-command 'vkEnumeratePhysicalDevices))
 (check-not-false (findf vk-param-count? (vk-command-params eipd)))
 
-;; 7. 事实与真实绑定一致：每条 api 命令都在 commands.inc 里
-(define cmd-lines (file->lines commands-inc))
+;; 7. 事实与真实绑定一致：每条 api 命令都在 commands.rkt 里
+(define cmd-lines (file->lines commands-rkt))
 (define (bound? name)
   (for/or ([l (in-list cmd-lines)])
     (string-contains? l (format "(define-vk ~a " name))))

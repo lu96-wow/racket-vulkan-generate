@@ -1,36 +1,16 @@
 #lang racket/base
-;; ============================================================
-;; commands.inc 的形式生成。
+;; commands.rkt 的形式生成：`vk-func` 记录 -> (define-vk ...)。
 ;;
-;; 运行期事实数据（generated/facts.rkt）的序列化在 emit-api.rkt。
+;; 命令的签名/分派/arity 已在解析期归一成 vk-func，本模块不再接触 registry。
+;; 运行期事实数据（generated/facts.rkt）在 emit-api.rkt。
 ;; ============================================================
 
-(require racket/list
-         "xexpr.rkt"
-         "vk-registry.rkt"
-         "ctype.rkt"
-         "facts-build.rkt")
+(require "model.rkt")
 
 (provide command-forms)
 
-;; alias 命令沿用目标命令的签名（proto/params/level）；基础层只做绑定：
-;; VkResult 命令直接返回结果值，错误策略在 safe 层。
-(define (command-form reg c)
-  (define nm (command-name c))
-  (define eff (resolve-command reg c))
-  (define proto (find-first-by-tag 'proto eff))
-  (define ret-base (base-c-type-name (member-type-text proto)))
-  (define params (params-of eff))
-  (define types (map (λ (p) (param-ctype reg p)) params))
-  (define fun
-    (if (equal? ret-base "VkResult")
-        `(_fun ,@types -> _VkResult)
-        `(_fun ,@types -> ,(ctype-of-type-name reg ret-base))))
-  `(define-vk ,(string->symbol nm) ,(command-level reg eff) ,(length params) ,fun))
+(define (function-form f)
+  `(define-vk ,(vk-func-name f) ,(vk-func-level f) ,(vk-func-arity f) ,(vk-func-fun f)))
 
-(define (command-forms reg wanted-cmds)
-  (filter values
-          (for/list ([nm wanted-cmds]
-                     #:when (and nm (not (member nm skip-commands))))
-            (define c (hash-ref (registry-commands-hash reg) (string->symbol nm) #f))
-            (and c (command-form reg c)))))
+(define (command-forms funcs)
+  (map function-form funcs))

@@ -1,3 +1,5 @@
+#lang racket/base
+(require ffi/unsafe vulkan/base)
 (define-vk vkCreateGraphicsPipelines device 6 (_fun _VkDevice _VkPipelineCache _uint32 _pointer _pointer _pointer -> _VkResult))
 (define-vk vkCreateFramebuffer device 4 (_fun _VkDevice _pointer _pointer _pointer -> _VkResult))
 (define-vk vkDestroyFramebuffer device 3 (_fun _VkDevice _VkFramebuffer _pointer -> _void))
@@ -278,3 +280,5 @@
 (define-vk vkGetDisplayPlaneCapabilitiesKHR instance 4 (_fun _VkPhysicalDevice _VkDisplayModeKHR _uint32 _pointer -> _VkResult))
 (define-vk vkCreateDisplayPlaneSurfaceKHR instance 4 (_fun _VkInstance _pointer _pointer _pointer -> _VkResult))
 (define-vk vkCreateHeadlessSurfaceEXT instance 4 (_fun _VkInstance _pointer _pointer _pointer -> _VkResult))
+(provide (all-defined-out))
+

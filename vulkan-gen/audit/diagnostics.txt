@@ -1,0 +1,211 @@
+info	type	Display	not a bindable type category (#f); skipped
+info	type	VK_API_VERSION	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_1_0	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_1_1	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_1_2	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_1_3	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_1_4	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_MAJOR	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_MINOR	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_PATCH	not a bindable type category (define); skipped
+info	type	VK_API_VERSION_VARIANT	not a bindable type category (define); skipped
+info	type	VK_DEFINE_HANDLE	not a bindable type category (define); skipped
+info	type	VK_DEFINE_NON_DISPATCHABLE_HANDLE	not a bindable type category (define); skipped
+info	type	VK_HEADER_VERSION	not a bindable type category (define); skipped
+info	type	VK_HEADER_VERSION_COMPLETE	not a bindable type category (define); skipped
+info	type	VK_MAKE_API_VERSION	not a bindable type category (define); skipped
+info	type	VK_MAKE_VERSION	not a bindable type category (define); skipped
+info	type	VK_NULL_HANDLE	not a bindable type category (define); skipped
+info	type	VK_USE_64_BIT_PTR_DEFINES	not a bindable type category (define); skipped
+info	type	VK_VERSION_MAJOR	not a bindable type category (define); skipped
+info	type	VK_VERSION_MINOR	not a bindable type category (define); skipped
+info	type	VK_VERSION_PATCH	not a bindable type category (define); skipped
+info	type	VisualID	not a bindable type category (#f); skipped
+info	type	Window	not a bindable type category (#f); skipped
+info	type	char	not a bindable type category (#f); skipped
+info	type	float	not a bindable type category (#f); skipped
+info	type	int32_t	not a bindable type category (#f); skipped
+info	type	size_t	not a bindable type category (#f); skipped
+info	type	uint16_t	not a bindable type category (#f); skipped
+info	type	uint32_t	not a bindable type category (#f); skipped
+info	type	uint64_t	not a bindable type category (#f); skipped
+info	type	uint8_t	not a bindable type category (#f); skipped
+info	type	void	not a bindable type category (#f); skipped
+info	type	wl_display	not a bindable type category (#f); skipped
+info	type	xcb_connection_t	not a bindable type category (#f); skipped
+info	type	xcb_visualid_t	not a bindable type category (#f); skipped
+info	type	xcb_window_t	not a bindable type category (#f); skipped
+warn	constant	VK_ATTACHMENT_UNUSED	unparsable enum value; dropped
+warn	constant	VK_SUBPASS_EXTERNAL	unparsable enum value; dropped
+warn	constant	VK_FALSE	unparsable enum value; dropped
+warn	constant	VK_LOD_CLAMP_NONE	unparsable enum value; dropped
+warn	constant	VK_QUEUE_FAMILY_IGNORED	unparsable enum value; dropped
+warn	constant	VK_REMAINING_ARRAY_LAYERS	unparsable enum value; dropped
+warn	constant	VK_REMAINING_MIP_LEVELS	unparsable enum value; dropped
+warn	constant	VK_TRUE	unparsable enum value; dropped
+warn	constant	VK_WHOLE_SIZE	unparsable enum value; dropped
+warn	constant	VK_MAX_MEMORY_TYPES	unparsable enum value; dropped
+warn	constant	VK_MAX_PHYSICAL_DEVICE_NAME_SIZE	unparsable enum value; dropped
+warn	constant	VK_UUID_SIZE	unparsable enum value; dropped
+warn	constant	VK_MAX_EXTENSION_NAME_SIZE	unparsable enum value; dropped
+warn	constant	VK_MAX_DESCRIPTION_SIZE	unparsable enum value; dropped
+warn	constant	VK_MAX_MEMORY_HEAPS	unparsable enum value; dropped
+warn	constant	VK_MAX_DEVICE_GROUP_SIZE	unparsable enum value; dropped
+warn	constant	VK_LUID_SIZE	unparsable enum value; dropped
+warn	constant	VK_QUEUE_FAMILY_EXTERNAL	unparsable enum value; dropped
+warn	constant	VK_MAX_DRIVER_NAME_SIZE	unparsable enum value; dropped
+warn	constant	VK_MAX_DRIVER_INFO_SIZE	unparsable enum value; dropped
+warn	constant	VK_MAX_GLOBAL_PRIORITY_SIZE	unparsable enum value; dropped
+info	safe	vkCmdSetLineWidth	no clean sugar shape; raw command only
+info	safe	vkCmdSetDepthBias	no clean sugar shape; raw command only
+info	safe	vkCmdSetBlendConstants	no clean sugar shape; raw command only
+info	safe	vkCmdSetDepthBounds	no clean sugar shape; raw command only
+info	safe	vkCmdSetStencilCompareMask	no clean sugar shape; raw command only
+info	safe	vkCmdSetStencilWriteMask	no clean sugar shape; raw command only
+info	safe	vkCmdSetStencilReference	no clean sugar shape; raw command only
+info	safe	vkCmdBindIndexBuffer	no clean sugar shape; raw command only
+info	safe	vkCmdBindVertexBuffers	no clean sugar shape; raw command only
+info	safe	vkCmdDraw	no clean sugar shape; raw command only
+info	safe	vkCmdDrawIndexed	no clean sugar shape; raw command only
+info	safe	vkCmdDrawIndirect	no clean sugar shape; raw command only
+info	safe	vkCmdDrawIndexedIndirect	no clean sugar shape; raw command only
+info	safe	vkCmdClearDepthStencilImage	no clean sugar shape; raw command only
+info	safe	vkCmdClearAttachments	no clean sugar shape; raw command only
+info	safe	vkCmdBeginRenderPass	no clean sugar shape; raw command only
+info	safe	vkCmdNextSubpass	no clean sugar shape; raw command only
+info	safe	vkCmdEndRenderPass	no clean sugar shape; raw command only
+info	safe	vkGetEventStatus	no clean sugar shape; raw command only
+info	safe	vkSetEvent	no clean sugar shape; raw command only
+info	safe	vkResetEvent	no clean sugar shape; raw command only
+info	safe	vkGetPipelineCacheData	no clean sugar shape; raw command only
+info	safe	vkResetDescriptorPool	no clean sugar shape; raw command only
+info	safe	vkUpdateDescriptorSets	no clean sugar shape; raw command only
+info	safe	vkCmdBindPipeline	no clean sugar shape; raw command only
+info	safe	vkCmdBindDescriptorSets	no clean sugar shape; raw command only
+info	safe	vkCmdClearColorImage	no clean sugar shape; raw command only
+info	safe	vkCmdDispatch	no clean sugar shape; raw command only
+info	safe	vkCmdDispatchIndirect	no clean sugar shape; raw command only
+info	safe	vkCmdSetEvent	no clean sugar shape; raw command only
+info	safe	vkCmdResetEvent	no clean sugar shape; raw command only
+info	safe	vkCmdWaitEvents	no clean sugar shape; raw command only
+info	safe	vkCmdPushConstants	no clean sugar shape; raw command only
+info	safe	vkQueueSubmit	no clean sugar shape; raw command only
+info	safe	vkQueueWaitIdle	no clean sugar shape; raw command only
+info	safe	vkDeviceWaitIdle	no clean sugar shape; raw command only
+info	safe	vkMapMemory	no clean sugar shape; raw command only
+info	safe	vkUnmapMemory	no clean sugar shape; raw command only
+info	safe	vkFlushMappedMemoryRanges	no clean sugar shape; raw command only
+info	safe	vkInvalidateMappedMemoryRanges	no clean sugar shape; raw command only
+info	safe	vkBindBufferMemory	no clean sugar shape; raw command only
+info	safe	vkBindImageMemory	no clean sugar shape; raw command only
+info	safe	vkQueueBindSparse	no clean sugar shape; raw command only
+info	safe	vkGetFenceStatus	no clean sugar shape; raw command only
+info	safe	vkGetQueryPoolResults	no clean sugar shape; raw command only
+info	safe	vkGetImageSubresourceLayout	no clean sugar shape; raw command only
+info	safe	vkResetCommandPool	no clean sugar shape; raw command only
+info	safe	vkBeginCommandBuffer	no clean sugar shape; raw command only
+info	safe	vkEndCommandBuffer	no clean sugar shape; raw command only
+info	safe	vkResetCommandBuffer	no clean sugar shape; raw command only
+info	safe	vkCmdUpdateBuffer	no clean sugar shape; raw command only
+info	safe	vkCmdFillBuffer	no clean sugar shape; raw command only
+info	safe	vkCmdPipelineBarrier	no clean sugar shape; raw command only
+info	safe	vkCmdBeginQuery	no clean sugar shape; raw command only
+info	safe	vkCmdEndQuery	no clean sugar shape; raw command only
+info	safe	vkCmdResetQueryPool	no clean sugar shape; raw command only
+info	safe	vkCmdWriteTimestamp	no clean sugar shape; raw command only
+info	safe	vkCmdCopyQueryPoolResults	no clean sugar shape; raw command only
+info	safe	vkCmdDispatchBase	no clean sugar shape; raw command only
+info	safe	vkUpdateDescriptorSetWithTemplate	no clean sugar shape; raw command only
+info	safe	vkGetDescriptorSetLayoutSupport	no clean sugar shape; raw command only
+info	safe	vkBindBufferMemory2	no clean sugar shape; raw command only
+info	safe	vkBindImageMemory2	no clean sugar shape; raw command only
+info	safe	vkCmdSetDeviceMask	no clean sugar shape; raw command only
+info	safe	vkGetImageMemoryRequirements2	no clean sugar shape; raw command only
+info	safe	vkGetBufferMemoryRequirements2	no clean sugar shape; raw command only
+info	safe	vkGetImageSparseMemoryRequirements2	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceImageFormatProperties2	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceSparseImageFormatProperties2	no clean sugar shape; raw command only
+info	safe	vkTrimCommandPool	no clean sugar shape; raw command only
+info	safe	vkGetDeviceQueue2	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceExternalBufferProperties	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceExternalFenceProperties	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceExternalSemaphoreProperties	no clean sugar shape; raw command only
+info	safe	vkCmdDrawIndirectCount	no clean sugar shape; raw command only
+info	safe	vkCmdDrawIndexedIndirectCount	no clean sugar shape; raw command only
+info	safe	vkCmdBeginRenderPass2	no clean sugar shape; raw command only
+info	safe	vkCmdNextSubpass2	no clean sugar shape; raw command only
+info	safe	vkCmdEndRenderPass2	no clean sugar shape; raw command only
+info	safe	vkResetQueryPool	no clean sugar shape; raw command only
+info	safe	vkWaitSemaphores	no clean sugar shape; raw command only
+info	safe	vkSignalSemaphore	no clean sugar shape; raw command only
+info	safe	vkGetBufferDeviceAddress	no clean sugar shape; raw command only
+info	safe	vkGetBufferOpaqueCaptureAddress	no clean sugar shape; raw command only
+info	safe	vkGetDeviceMemoryOpaqueCaptureAddress	no clean sugar shape; raw command only
+info	safe	vkCmdBlitImage2	no clean sugar shape; raw command only
+info	safe	vkCmdResolveImage2	no clean sugar shape; raw command only
+info	safe	vkCmdBeginRendering	no clean sugar shape; raw command only
+info	safe	vkCmdEndRendering	no clean sugar shape; raw command only
+info	safe	vkCmdSetCullMode	no clean sugar shape; raw command only
+info	safe	vkCmdSetFrontFace	no clean sugar shape; raw command only
+info	safe	vkCmdSetPrimitiveTopology	no clean sugar shape; raw command only
+info	safe	vkCmdBindVertexBuffers2	no clean sugar shape; raw command only
+info	safe	vkCmdSetDepthTestEnable	no clean sugar shape; raw command only
+info	safe	vkCmdSetDepthWriteEnable	no clean sugar shape; raw command only
+info	safe	vkCmdSetDepthCompareOp	no clean sugar shape; raw command only
+info	safe	vkCmdSetDepthBoundsTestEnable	no clean sugar shape; raw command only
+info	safe	vkCmdSetStencilTestEnable	no clean sugar shape; raw command only
+info	safe	vkCmdSetStencilOp	no clean sugar shape; raw command only
+info	safe	vkCmdSetRasterizerDiscardEnable	no clean sugar shape; raw command only
+info	safe	vkCmdSetDepthBiasEnable	no clean sugar shape; raw command only
+info	safe	vkCmdSetPrimitiveRestartEnable	no clean sugar shape; raw command only
+info	safe	vkCmdSetEvent2	no clean sugar shape; raw command only
+info	safe	vkCmdResetEvent2	no clean sugar shape; raw command only
+info	safe	vkCmdWaitEvents2	no clean sugar shape; raw command only
+info	safe	vkSetPrivateData	no clean sugar shape; raw command only
+info	safe	vkCmdPipelineBarrier2	no clean sugar shape; raw command only
+info	safe	vkCmdWriteTimestamp2	no clean sugar shape; raw command only
+info	safe	vkQueueSubmit2	no clean sugar shape; raw command only
+info	safe	vkCmdCopyBuffer2	no clean sugar shape; raw command only
+info	safe	vkCmdCopyImage2	no clean sugar shape; raw command only
+info	safe	vkCmdCopyBufferToImage2	no clean sugar shape; raw command only
+info	safe	vkCmdCopyImageToBuffer2	no clean sugar shape; raw command only
+info	safe	vkGetDeviceBufferMemoryRequirements	no clean sugar shape; raw command only
+info	safe	vkGetDeviceImageMemoryRequirements	no clean sugar shape; raw command only
+info	safe	vkGetDeviceImageSparseMemoryRequirements	no clean sugar shape; raw command only
+info	safe	vkCmdSetLineStipple	no clean sugar shape; raw command only
+info	safe	vkCmdBindIndexBuffer2	no clean sugar shape; raw command only
+info	safe	vkGetRenderingAreaGranularity	no clean sugar shape; raw command only
+info	safe	vkCmdSetRenderingAttachmentLocations	no clean sugar shape; raw command only
+info	safe	vkCmdSetRenderingInputAttachmentIndices	no clean sugar shape; raw command only
+info	safe	vkCmdPushDescriptorSet	no clean sugar shape; raw command only
+info	safe	vkCmdPushDescriptorSetWithTemplate	no clean sugar shape; raw command only
+info	safe	vkCmdBindDescriptorSets2	no clean sugar shape; raw command only
+info	safe	vkCmdPushConstants2	no clean sugar shape; raw command only
+info	safe	vkCmdPushDescriptorSet2	no clean sugar shape; raw command only
+info	safe	vkCmdPushDescriptorSetWithTemplate2	no clean sugar shape; raw command only
+info	safe	vkMapMemory2	no clean sugar shape; raw command only
+info	safe	vkUnmapMemory2	no clean sugar shape; raw command only
+info	safe	vkGetDeviceImageSubresourceLayout	no clean sugar shape; raw command only
+info	safe	vkGetImageSubresourceLayout2	no clean sugar shape; raw command only
+info	safe	vkCopyMemoryToImage	no clean sugar shape; raw command only
+info	safe	vkCopyImageToMemory	no clean sugar shape; raw command only
+info	safe	vkCopyImageToImage	no clean sugar shape; raw command only
+info	safe	vkTransitionImageLayout	no clean sugar shape; raw command only
+info	safe	vkQueuePresentKHR	no clean sugar shape; raw command only
+info	safe	vkAcquireNextImage2KHR	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceXcbPresentationSupportKHR	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceXlibPresentationSupportKHR	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceWaylandPresentationSupportKHR	no clean sugar shape; raw command only
+info	safe	vkSetDebugUtilsObjectNameEXT	no clean sugar shape; raw command only
+info	safe	vkSetDebugUtilsObjectTagEXT	no clean sugar shape; raw command only
+info	safe	vkQueueBeginDebugUtilsLabelEXT	no clean sugar shape; raw command only
+info	safe	vkQueueEndDebugUtilsLabelEXT	no clean sugar shape; raw command only
+info	safe	vkQueueInsertDebugUtilsLabelEXT	no clean sugar shape; raw command only
+info	safe	vkCmdBeginDebugUtilsLabelEXT	no clean sugar shape; raw command only
+info	safe	vkCmdEndDebugUtilsLabelEXT	no clean sugar shape; raw command only
+info	safe	vkCmdInsertDebugUtilsLabelEXT	no clean sugar shape; raw command only
+info	safe	vkSubmitDebugUtilsMessageEXT	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceImageFormatProperties2KHR	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceSparseImageFormatProperties2KHR	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceSurfaceCapabilities2KHR	no clean sugar shape; raw command only
+info	safe	vkGetPhysicalDeviceSurfaceFormats2KHR	no clean sugar shape; raw command only

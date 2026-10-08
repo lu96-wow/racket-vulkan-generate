@@ -1,14 +1,15 @@
 #lang racket/base
 ;; ============================================================
-;; constants.inc 的值解析与排序输出。
+;; constants.rkt 的值解析与形式生成。
 ;; ============================================================
 
 (require racket/list
          racket/string
          "xexpr.rkt"
-         "vk-registry.rkt")
+         "vk-registry.rkt"
+         "model.rkt")
 
-(provide parsed-constants constant-forms ordered-constants)
+(provide parsed-constants constant-forms)
 
 (define (mask-of bits) (- (arithmetic-shift 1 bits) 1))
 (define (strip-parens s)
@@ -58,25 +59,24 @@
 ;; --- 解析：常量名 -> 值（整数/浮点/bytes，或 alias 的符号）---
 ;; 返回按「可复现顺序」排好的 (name . valexpr) 列表：literal 先按名字排序，
 ;; 依赖其他常量的 alias 再按轮次补齐。生成阶段只做 (define ...) 包装。
-(define (parsed-constants reg closure ext-enums)
+(define (parsed-constants reg closure ext-enums [diags #f])
   ;; name -> valexpr（整数/浮点，或 alias 的符号）
   (define constant-map (make-hasheqv))
   (define (put! name valexpr)
     (unless (hash-has-key? constant-map name)
       (hash-set! constant-map name valexpr)))
+  (define (put-enum! e en)
+    (define nm (attr e 'name))
+    (when nm
+      (define v (enumerant->valexpr e en))
+      (cond [v (put! (string->symbol nm) v)]
+            [else (diagnose! diags 'warn 'constant nm "unparsable enum value; dropped")])))
 
   (for ([blk (registry-enums-blocks reg)])
-    (for ([e (find-all-by-tag 'enum blk)])
-      (define nm (attr e 'name))
-      (when nm
-        (define v (enumerant->valexpr e #f))
-        (when v (put! (string->symbol nm) v)))))
+    (for ([e (find-all-by-tag 'enum blk)]) (put-enum! e #f)))
   (for ([fn closure])
     (define f (feature-by-name reg fn))
-    (when f
-      (for ([e (find-all-by-tag 'enum f)])
-        (define nm (attr e 'name))
-        (when nm (define v (enumerant->valexpr e #f)) (when v (put! (string->symbol nm) v))))))
+    (when f (for ([e (find-all-by-tag 'enum f)]) (put-enum! e #f))))
   ;; 扩展常量（含 extension-relative offset/extnumber）
   (for ([pair ext-enums])
     (define en (string->number (car pair)))
@@ -85,7 +85,10 @@
     (when nm
       (define alias (attr ch 'alias #f))
       (cond [alias (put! (string->symbol nm) (string->symbol alias))]
-            [else (define v (enumerant->valexpr ch en)) (when v (put! (string->symbol nm) v))])))
+            [else
+             (define v (enumerant->valexpr ch en))
+             (cond [v (put! (string->symbol nm) v)]
+                   [else (diagnose! diags 'warn 'constant nm "unparsable extension enum value; dropped")])])))
   (for ([nm (hash-keys (registry-types-hash reg))])
     (define ty (hash-ref (registry-types-hash reg) nm))
     (when (eq? (cat-of ty) 'define)
@@ -113,10 +116,10 @@
           (set! out (cons (cons nm v) out))
           (set! progressed #t))))
     (when progressed (loop)))
+  ;; 不静默：未发射的 alias 逐一记录
+  (for ([nm (names)] #:unless (hash-has-key? emitted nm))
+    (diagnose! diags 'warn 'constant nm "alias target not emitted; constant dropped"))
   (reverse out))
 
 (define (constant-forms pairs)
   (for/list ([p (in-list pairs)]) `(define ,(car p) ,(cdr p))))
-
-(define (ordered-constants reg closure ext-enums)
-  (constant-forms (parsed-constants reg closure ext-enums)))

@@ -61,8 +61,8 @@ Vulkan 对 host 内存的持有方式（决定需要多长的生命周期）：
 | 生成器 | `vulkan-gen/` | `vulkan/api-facts`（IR 契约）+ 资源 | ✗（构建期） |
 | 最终目标 | `vulkan/` | 无（用已提交的 `generated/`） | ✓ |
 
-生成器输出分开：运行期需要的 `*.inc`/`facts.rkt` → `vulkan/generated/`；
-审计产物 `abi_check.c`/`unknown-types.txt` → `vulkan-gen/audit/`。
+生成器输出分开：运行期需要的 `generated/*.rkt`（真模块）→ `vulkan/generated/`；
+审计产物 `abi_check.c`/`unknown-types.txt`/`diagnostics.txt` → `vulkan-gen/audit/`。
 `vulkan` 对 `vulkan-gen`/`registry` 零引用——删掉后两者，运行期仍可编译运行。
 
 资源获取标准化：`fetch-registry.rkt <version>` 按 Khronos git tag 拉取并自检
@@ -75,7 +75,7 @@ Vulkan 对 host 内存的持有方式（决定需要多长的生命周期）：
 不是命名空间（同时支持多 API 版本属另一维度，用 `vulkan/1-x` 命名空间另议）。
 
 ```
-registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,types,commands,safe,pnext}.inc + facts.rkt
+registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,types,commands,safe,pnext}.rkt + facts.rkt
                                          │
      ┌───────────────────────────────────┼────────────────────────────┐
      ▼                                   ▼                            ▼
@@ -114,6 +114,7 @@ registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,
 | `vulkan/manual` | 手动模式 = `bindings` + `memory`（裸命令 + arena） | 错误策略、create 包装 |
 | `vulkan/unsafe` | 已弃用别名（= `vulkan/manual`） | — |
 | `vulkan/safe` | 组合层总入口：`check-vk-result` + `vkCreate*`/`vkDestroy*` 糖 + context/callback/pnext/capability/map | 裸命令（靠模块隔离区分） |
+| `vulkan/safe-support` | safe 糖运行期小工具（`vk-read-handles`/`vk-cstring`）；被生成的 `generated/safe.rkt` require | 策略、命令 |
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） | 生成逻辑、策略 |
 | `vulkan/version` | 绑定版本/provenance（`vk-binding-version` 等；实现来自 `generated/version.rkt`） | 生成逻辑 |
 | `vulkan-gen/*` | 生成器（构建期，不参与运行期）：解析 `parse`（`vk-registry`/`extension-select`/`constants`/`ctype`/`facts-build`）→ 生成 `generate`（`emit-*`/`classify`/`module`）→ 输出 `main`；模块骨架/ABI C 模板在 `templates/`（`template` 加载） | 运行期依赖 |
@@ -141,9 +142,9 @@ registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,
 - 只要裸命令：`(require vulkan/bindings)` 或 `(require vulkan/raw)`。
 - 两者都要：`(require vulkan (prefix-in raw: vulkan/raw))`。
 
-实现上：`safe.rkt` 用 `(prefix-in raw: "commands.rkt")` 导入裸命令，
-生成物 `safe.inc` 的包装以 `raw:vkCreateBuffer` 调用、以原生名 `vkCreateBuffer` 定义。
-由 `tests/module-surface.rkt` 锁定这个契约。
+实现上：手写 `safe.rkt` 不再 include，而是 require 生成的 `generated/safe.rkt`
+（后者自己 `(prefix-in raw: vulkan/commands)`）；生成物以 `raw:vkCreateBuffer` 调用、
+以原生名 `vkCreateBuffer` 定义。由 `tests/module-surface.rkt` 锁定这个契约。
 
 **每次新增导出前先想：它属于哪一层？放错层比命名冲突更糟。**
 
@@ -212,7 +213,7 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 | 窗口/GLFW | | ✅ | glfw |
 
 原则：**生成器只产出事实**（布局、签名、别名、分派级别）；**策略由手写组合层承担**。
-唯一的例外是 `types.inc` 的 `#:malloc-mode 'zeroed-atomic-interior`——它被视为绑定层的
+唯一的例外是 `types.rkt` 的 `#:malloc-mode 'zeroed-atomic-interior`——它被视为绑定层的
 安全默认（驱动可见内存默认不移动），不是可选项。
 
 ---
@@ -293,8 +294,9 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 - **G1**：alias 已解析；**bitfield 已按存储单元打包**成底层整型字段（`_bitsN`），
   并生成掩码/移位访问器（`VkX-<field>` / `set-VkX-<field>!`）；**多维数组保留全部维度**
   （`float matrix[3][4]` → `(_array _float 3 4)`）。由 `tests/bitfield.rkt` 锁定。
-- **G2**：未识别类型不再静默：`ctype-of-type-name` 记录到 `vulkan-gen/audit/unknown-types.txt`，
-  可用 `VULKAN_GEN_STRICT=1` 报错。当前 `common` 与 `all` 均 **0 未知类型**
+- **G2**：未识别类型不再静默：降级为 `_pointer` 的类型写进 `vulkan-gen/audit/unknown-types.txt`，
+  全部降级/跳过（含跳过宏、无糖形状）写进 `diagnostics.txt`（领域+实体+原因），
+  可用 `VULKAN_GEN_STRICT=1` 把未知类型提升为错误。当前 `common` 与 `all` 均 **0 未知类型**
   （Win32 / DirectFB / NvSci / StdVideo 等外部类型已映射进 `platform-ctype`）。
 
 ---
@@ -489,14 +491,15 @@ vk.xml ─parse──▶ vk-model{constants, enums, structs, other-types, comman
               │
  generate ────┼─ generate-constants ─┐
               ├─ generate-enums      │  modules（deps / body / exports）
-              ├─ generate-structs    ├─▶ vk-artifact ─▶ 写出（.inc 模块体 / 完整模块）
+              ├─ generate-structs    ├─▶ vk-artifact ─▶ 写出（真模块：deps/body/exports）
               ├─ generate-functions ─┘
-              └─ generate-types（按拓扑序交错 -> types.inc）
+              └─ generate-types（按拓扑序交错 -> types.rkt）
 ```
 
 目标 Racket 模块统一建模为三部分 `vk-module`（`module.rkt`）：**模块依赖 deps /
 模块体 body / 导出 exports**。生成层只产出 body；deps/exports 是元数据，由
-`vk-artifact` 的 render 承担“逻辑输出”（`.inc` 只写 body，`.rkt` 写完整模块）。
+`vk-artifact` 的 render 承担“逻辑输出”：用模板组装**真模块**（每个产物都有
+`#lang` + requires + body + provide，运行期 `require` 而不再 `include`）。
 模板程序（模块骨架 / ABI 对照 C）外置在 `vulkan-gen/templates/`，由 `template.rkt`
 加载替换，不嵌进 Racket 代码。
 
@@ -506,6 +509,13 @@ vk.xml ─parse──▶ vk-model{constants, enums, structs, other-types, comman
 `emit-api`、`emit-pnext`、`emit-version`、`classify` + `emit-safe` + `module` → `generate`；
 `templates/` + `template`（模板）。`vulkan-gen/main.rkt` 只做 driver，CLI 是它的
 `module+ main`（`racket vulkan-gen/main.rkt [args]`）。
+
+**诊断与容错**：解析/生成各自显式返回/收集 `vk-diagnostic`（领域+实体+原因），
+由 driver 汇总写 `unknown-types.txt`（仅 `_pointer` 降级）与 `diagnostics.txt`（全部）；
+不存在隐式全局回调。输出先**全部渲染成字符串**、任何失败都不落盘，再 `.tmp`+rename
+原子写入（`module.rkt` 的 `artifact->string` / `write-file/atomic`）。模板替换后若仍有
+`@@KEY@@` 残留则直接报错。`vk-model` 自足（不含 registry），生成层不再回看 XML。
+由 `tests/gen-pipeline.rkt` 锁定（解析可复现、四类划分、模块 deps、快照逐字节一致）。
 
 **1) 分类（纯函数）**：`(classify cmd) -> (values shape plan)`。
 固定枚举的 shape（固定签名匹配，按表顺序先到先得）：
@@ -580,7 +590,7 @@ Racket `define-cstruct` 不支持 C 位域，所以**一个存储单元打成一
 
 ### 6.12 pNext / sType（`vulkan/pnext`）
 
-生成 `generated/pnext.inc` 两张表：`vk-struct-sType`（struct 名 → sType 值）与
+生成 `generated/pnext.rkt` 两张表：`vk-struct-sType`（struct 名 → sType 值）与
 `vk-pNext-setters`（sType 值 → `set-VkX-pNext!`）。
 
 ```racket

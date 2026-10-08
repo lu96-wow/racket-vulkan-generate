@@ -1,3 +1,5 @@
+#lang racket/base
+(require ffi/unsafe ffi/unsafe/define "constants.rkt")
 (define _VkAccessFlagBits _int32)
 (define _VkAccessFlagBits2 _int32)
 (define _VkAccessFlags _uint32)
@@ -650,3 +652,5 @@
 (define _VkSparseImageFormatProperties2KHR _VkSparseImageFormatProperties2)
 (define _VkQueueFamilyProperties2KHR _VkQueueFamilyProperties2)
 (define _VkImageFormatProperties2KHR _VkImageFormatProperties2)
+(provide (all-defined-out))
+

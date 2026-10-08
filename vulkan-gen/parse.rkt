@@ -1,15 +1,10 @@
 #lang racket/base
 ;; ============================================================
-;; 解析层：`vk.xml` + 目标 feature/扩展 -> `vk-model`（纯数据领域模型）。
+;; 解析层：`vk.xml` + 目标 feature/扩展 -> `vk-model` + 诊断。
 ;;
-;; 只做「事实归一化」，不产出任何 Racket 形式、不写文件：
-;;   * feature/extension 依赖闭包                  -> 命令名 / 类型名
-;;   * wanted 类型闭包 + by-value 依赖拓扑排序      -> 有序类型表
-;;   * 常量值解析（枚举成员 / #define / 扩展常量）  -> (name . valexpr)
-;;   * 命令/参数 -> vk-command（运行期 IR）
-;;
-;; 分类：预定义常量 constants / 枚举 enums / 结构体 structs / 其他类型 other-types /
-;; 函数 commands。生成阶段（generate.rkt）再分别转成形式。
+;; 目标：产出**自足、归一、可审计**的事实模型，不含 Racket 形式/策略。
+;; 分类：预定义常量 / 枚举 / 结构体 / 其他类型 / 函数；降级与丢弃一律记诊断。
+;; 生成层只看 vk-model，不再回看 registry。
 ;; ============================================================
 
 (require racket/list
@@ -18,29 +13,11 @@
          "vk-registry.rkt"
          "extension-select.rkt"
          "ctype.rkt"
+         (except-in "facts-build.rkt" params-of pointer-param?)
          "constants.rkt"
-         "facts-build.rkt")
+         "model.rkt")
 
-(provide (struct-out vk-model)
-         parse-model)
-
-;; registry           : registry（XML 事实）
-;; feature/extensions : 目标参数（feature 名 / 扩展选择串）
-;; requested-extensions/ext-closure : 扩展名单 / 依赖闭包
-;; feat-types         : feature 直接 require 的类型名（ABI 审计用）
-;; wanted-cmds        : 纳入的全部命令名（feature + 扩展）
-;; wanted-list        : wanted 类型名（排序，过滤到 registry 已知）
-;; types              : wanted-list 的 by-value 依赖拓扑序（= types.inc 顺序）
-;; constants          : 有序 (name . valexpr)（= constants.inc）
-;; enums/structs/other-types : types 按类别切分（供分类生成/审计）
-;; commands           : 归一化后的 vk-command 列表（= facts.rkt / commands.inc）
-(struct vk-model
-  (registry feature extensions closure
-   requested-extensions ext-closure feat-types
-   wanted-cmds wanted-list types
-   constants enums structs other-types
-   commands)
-  #:transparent)
+(provide parse-model)
 
 (define (sym<? a b) (string<? (symbol->string a) (symbol->string b)))
 
@@ -83,15 +60,90 @@
     (when (> (hash-count wanted) before) (loop)))
   (sort (filter (λ (n) (hash-has-key? (registry-types-hash reg) n)) (hash-keys wanted)) sym<?))
 
-(define (partition-types reg types)
-  (define (only cats) (filter (λ (nm) (memq (type-category reg nm) cats)) types))
-  (values (only '(enum))
-          (only '(struct union))
-          (only '(handle bitmask basetype funcpointer alias))))
+;; ---------------- 类型事实 ----------------
 
-(define (parse-model #:registry reg
-                     #:feature feature
-                     #:extensions extensions)
+;; struct 可扩展（有 pNext+sType）时的 sType 常量名
+(define (pnext-sType ty)
+  (and (eq? (cat-of ty) 'struct)
+       (for/or ([m (members-of ty)]) (equal? (member-name m) "pNext"))
+       (for/first ([m (members-of ty)] #:when (equal? (member-name m) "sType"))
+         (define v (attr m 'values #f))
+         (and v (string->symbol v)))))
+
+(define (union-member-ctypes reg ty diags)
+  (define members (filter member-name (members-of ty)))
+  (define cts
+    (for/list ([m members])
+      (define base (member-base-name m))
+      (cond
+        [(pointer-member? m) '_pointer]
+        [(array-member? m)
+         (define dims (array-dims m))
+         (cond
+           [(null? dims) (ctype-of-type-name reg base diags)]
+           [(andmap integer? dims)
+            (if (= 1 (length dims))
+                `(_list-struct ,@(build-list (car dims) (λ _ (ctype-of-type-name reg base diags))))
+                `(_array ,(ctype-of-type-name reg base diags) ,@dims))]
+           [else `(_array ,(ctype-of-type-name reg base diags) ,@dims)])]
+        [else (ctype-of-type-name reg base diags)])))
+  (if (null? cts) (list '_uint8) cts))
+
+(define (parse-type reg nm diags)
+  (define ty (hash-ref (registry-types-hash reg) nm))
+  (define raw (cat-of ty))
+  (define alias (attr ty 'alias #f))
+  (define (d! reason) (diagnose! diags 'warn 'type nm reason))
+  (cond
+    ;; alias：只记目标，不展开成员
+    [alias (vk-type nm raw (string->symbol alias) #f #f #f #f #f #f)]
+    [(eq? raw 'handle) (vk-type nm 'handle #f
+                                 `(_cpointer/null (quote ,(string->symbol (format "~a_T" nm))))
+                                 #f #f #f #f #f)]
+    [(eq? raw 'basetype)
+     (define b (or (hash-ref basetype-map (symbol->string nm) #f)
+                   (hash-ref platform-ctype (symbol->string nm) #f)))
+     (unless b (d! "basetype not in basetype-map/platform-ctype; using _pointer"))
+     (vk-type nm 'basetype #f (or b '_pointer) #f #f #f #f #f)]
+    [(eq? raw 'bitmask) (vk-type nm 'bitmask #f (if (bitmask-64? reg ty) '_uint64 '_uint32) #f #f #f #f #f)]
+    [(eq? raw 'enum) (vk-type nm 'enum #f '_int32 #f #f #f #f #f)]
+    [(eq? raw 'struct) (vk-type nm 'struct #f #f (struct-layout reg ty diags) #f #f #f (pnext-sType ty))]
+    [(eq? raw 'union) (vk-type nm 'union #f #f #f (union-member-ctypes reg ty diags) #f #f #f)]
+    [(eq? raw 'funcpointer)
+     (define proto (find-first-by-tag 'proto ty))
+     (define ret (if proto (ctype-of-type-name reg (member-base-name proto) diags) '_void))
+     (define args (map (λ (p) (param-ctype reg p diags)) (params-of ty)))
+     (vk-type nm 'funcpointer #f #f #f #f ret args #f)]
+    [else (diagnose! diags 'info 'type nm (format "not a bindable type category (~a); skipped" raw)) #f]))
+
+;; ---------------- 命令绑定事实 ----------------
+
+(define (function-fun reg eff diags)
+  (define proto (find-first-by-tag 'proto eff))
+  (define ret-base (base-c-type-name (member-type-text proto)))
+  (define params (params-of eff))
+  (define types (map (λ (p) (param-ctype reg p diags)) params))
+  (if (equal? ret-base "VkResult")
+      `(_fun ,@types -> _VkResult)
+      `(_fun ,@types -> ,(ctype-of-type-name reg ret-base diags))))
+
+(define (parse-functions reg wanted-cmds diags)
+  (filter values
+          (for/list ([nm (in-list wanted-cmds)]
+                     #:when (and nm (not (member nm skip-commands))))
+            (define c (hash-ref (registry-commands-hash reg) (string->symbol nm) #f))
+            (cond
+              [c (define eff (resolve-command reg c))
+                 (vk-func (string->symbol (command-name c))
+                          (command-level reg eff)
+                          (length (params-of eff))
+                          (function-fun reg eff diags))]
+              [else #f]))))
+
+;; ---------------- 模型 ----------------
+
+(define (parse-model #:registry reg #:feature feature #:extensions extensions)
+  (define diags (make-diagnostics))
   (define closure (feature-closure reg feature))
   (define requested-extensions (resolve-extensions reg extensions))
   (define ext-closure (extension-closure reg requested-extensions))
@@ -101,14 +153,25 @@
   (define wanted-types (append feat-types ext-types))
 
   (define wanted-list (wanted-type-closure reg wanted-types wanted-cmds))
-  (define types (topo-sort wanted-list (λ (nm) (type-dependencies reg nm))))
+  (define type-names (topo-sort wanted-list (λ (nm) (type-dependencies reg nm))))
+  (define types (filter values (map (λ (nm) (parse-type reg nm diags)) type-names)))
 
-  (define constants (parsed-constants reg closure ext-enums))
-  (define commands (api-commands reg wanted-cmds))
-  (define-values (enums structs other-types) (partition-types reg types))
+  (define (effective t) (if (vk-type-alias t) 'alias (vk-type-category t)))
+  (define (category-in? t cats) (memq (effective t) cats))
+  (define enums (filter (λ (t) (category-in? t '(enum))) types))
+  (define structs (filter (λ (t) (category-in? t '(struct union))) types))
+  (define other-types
+    (filter (λ (t) (category-in? t '(handle bitmask basetype funcpointer alias))) types))
 
-  (vk-model reg feature extensions closure
-            requested-extensions ext-closure feat-types
-            wanted-cmds wanted-list types
-            constants enums structs other-types
-            commands))
+  (define constants (parsed-constants reg closure ext-enums diags))
+  (define commands (api-commands reg wanted-cmds diags))
+  (define functions (parse-functions reg wanted-cmds diags))
+
+  (values
+   (vk-model (registry-version reg)
+             feature extensions closure
+             requested-extensions ext-closure feat-types
+             wanted-cmds wanted-list
+             constants types functions commands
+             enums structs other-types)
+   (diagnostics-list diags)))

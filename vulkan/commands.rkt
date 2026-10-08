@@ -1,14 +1,11 @@
 #lang racket/base
 ;; ============================================================
-;; 原始命令（自动生成）：每条命令返回 VkResult / void，不含任何策略。
-;; 类型/常量/分派来自 vulkan/base。
+;; 原始命令（vulkan/commands）：re-export 生成的 commands 模块。
+;;
+;; 签名与分派都在 vulkan/generated/commands.rkt（真模块）：它 require
+;; vulkan/base 拿 `define-vk` 与全部 ctype。本模块只做 re-provide。
 ;; ============================================================
 
-(require ffi/unsafe
-         ffi/unsafe/define
-         racket/include
-         "base.rkt")
+(require "generated/commands.rkt")
 
-(provide (all-defined-out))
-
-(include "generated/commands.inc")
+(provide (all-from-out "generated/commands.rkt"))

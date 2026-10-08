@@ -1,7 +1,5 @@
 #lang racket/base
-(require ffi/unsafe racket/include)
-(include "constants.inc")
-(include "types.inc")
+(require ffi/unsafe "constants.rkt" "types.rkt")
 (define sz (ctype-sizeof _VkAccelerationStructureInstanceKHR))
 (define mem (malloc 'atomic-interior sz))
 (memset mem 0 sz)

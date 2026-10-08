@@ -11,7 +11,8 @@
          vulkan/api-facts
          "xexpr.rkt"
          "vk-registry.rkt"
-         "ctype.rkt")
+         "ctype.rkt"
+         "model.rkt")
 
 (provide skip-commands
          params-of pointer-param? command-level command-result?
@@ -105,29 +106,35 @@
               (hash-set! cache key res)
               res)))
 
-(define (api-param reg cache p)
+(define (api-param reg cache p [diags #f])
   (define base (member-base-name p))
   (define ptr? (pointer-param? p))
   (define const? (param-const? p))
   (define kind (param-kind reg base))
   (define flat? (if (memq kind '(struct union)) (flat-struct? reg cache base) #t))
-  (vk-param (string->symbol (member-name p)) base (ctype-of-type-name reg base)
+  (when (eq? kind 'unknown)
+    (diagnose! diags 'warn 'command (member-name p)
+               (format "param base type not classified: ~a" base)))
+  (vk-param (string->symbol (member-name p)) base (ctype-of-type-name reg base diags)
             ptr? const? (count-param? p) kind
             (and ptr? (not const?)) flat?))
 
-(define (api-command reg cache c)
+(define (api-command reg cache c [diags #f])
   (define eff (resolve-command reg c))
   (vk-command (string->symbol (command-name c))
               (command-level reg eff)
               (command-result? reg c)
               (dispatch-base-of reg c)
-              (map (λ (p) (api-param reg cache p)) (params-of eff))
+              (map (λ (p) (api-param reg cache p diags)) (params-of eff))
               (allocate-count-field reg c)))
 
-(define (api-commands reg wanted-cmds)
+(define (api-commands reg wanted-cmds [diags #f])
   (define cache (make-hash))
   (filter values
           (for/list ([nm wanted-cmds]
                      #:when (and nm (not (member nm skip-commands))))
             (define c (hash-ref (registry-commands-hash reg) (string->symbol nm) #f))
-            (and c (api-command reg cache c)))))
+            (cond
+              [c (api-command reg cache c diags)]
+              [else (diagnose! diags 'warn 'command nm "command not found in registry; skipped")
+                    #f]))))

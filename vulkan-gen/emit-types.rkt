@@ -1,48 +1,17 @@
 #lang racket/base
 ;; ============================================================
-;; types.inc 的形式生成：把一个拓扑排序后的类型名列表变成 (define ...)。
-;; 只依赖注册表事实 + ctype 映射。
+;; types.rkt 的形式生成：`vk-type` 记录 -> (define ...)。
+;;
+;; 解析期已把类别与生成所需 slot（ctype / layout / union-ctypes / func-*）
+;; 算好，本模块不再接触 registry 或 ctype 映射。
 ;; ============================================================
 
 (require racket/list
-         "xexpr.rkt"
-         "vk-registry.rkt"
-         "ctype.rkt")
+         "model.rkt")
 
-(provide type-forms type-forms-of)
+(provide type-forms type-form)
 
-(define (handle->form nm)
-  `(define ,(string->symbol (format "_~a" nm))
-     (_cpointer/null (quote ,(string->symbol (format "~a_T" nm))))))
-(define (basetype->form nm)
-  `(define ,(string->symbol (format "_~a" nm))
-     ,(hash-ref basetype-map (symbol->string nm) '_pointer)))
-(define (bitmask->form reg nm ty)
-  (define a (attr ty 'alias #f))
-  (if a `(define ,(string->symbol (format "_~a" nm)) ,(string->symbol (format "_~a" a)))
-      `(define ,(string->symbol (format "_~a" nm)) ,(if (bitmask-64? reg ty) '_uint64 '_uint32))))
-(define (enum->form nm ty)
-  (define a (attr ty 'alias #f))
-  (if a `(define ,(string->symbol (format "_~a" nm)) ,(string->symbol (format "_~a" a)))
-      `(define ,(string->symbol (format "_~a" nm)) _int32)))
-(define (funcpointer->form reg nm ty)
-  (define proto (find-first-by-tag 'proto ty))
-  (define ret (if proto (ctype-of-type-name reg (member-base-name proto)) '_void))
-  (define args (map (λ (p) (param-ctype reg p)) (params-of ty)))
-  `(define ,(string->symbol (format "_~a" nm))
-     (_cprocedure (list ,@args) ,ret)))
-(define (struct->form reg nm ty)
-  (define layout (struct-layout reg ty))
-  (define fields
-    (for/list ([f layout])
-      (cond [(vk-cfield? f) (list (vk-cfield-name f) (vk-cfield-ctype f))]
-            [else (list (vk-bitgroup-storage f) (vk-bitgroup-base-ctype f))])))
-  (define fields* (if (null? fields) (list (list '_dummy '_uint8)) fields))
-  (define accessors (append-map (λ (f) (if (vk-bitgroup? f) (bitgroup-accessors nm f) '())) layout))
-  (cons
-   `(define-cstruct ,(string->symbol (format "_~a" nm)) ,fields*
-      #:malloc-mode 'zeroed-atomic-interior)
-   accessors))
+(define (sym nm) (string->symbol (format "_~a" nm)))
 
 ;; 位域访问器：掩码 + 移位；setter 读改写。reserved 只占位，不生成访问器。
 (define (bitgroup-accessors nm g)
@@ -66,49 +35,34 @@
          (,writer p (bitwise-ior
                      (bitwise-and u (bitwise-not (arithmetic-shift ,mask ,off)))
                      (arithmetic-shift (bitwise-and v ,mask) ,off))))))))
-(define (union->form reg nm ty)
-  (define members (filter member-name (members-of ty)))
-  (define ctypes
-    (for/list ([m members])
-      (define base (member-base-name m))
-      (cond
-        [(pointer-member? m) '_pointer]
-        [(array-member? m)
-         (define dims (array-dims m))
-         (cond
-           [(null? dims) (ctype-of-type-name reg base)]
-           [(andmap integer? dims)
-            (if (= 1 (length dims))
-                `(_list-struct ,@(build-list (car dims) (λ _ (ctype-of-type-name reg base))))
-                `(_array ,(ctype-of-type-name reg base) ,@dims))]
-           [else `(_array ,(ctype-of-type-name reg base) ,@dims)])]
-        [else (ctype-of-type-name reg base)])))
-  (define ctypes* (if (null? ctypes) (list '_uint8) ctypes))
-  `(define ,(string->symbol (format "_~a" nm)) (_union ,@ctypes*)))
-(define (alias->form nm target)
-  `(define ,(string->symbol (format "_~a" nm)) ,(string->symbol (format "_~a" target))))
 
-(define (type-form reg nm)
-  (define ty (hash-ref (registry-types-hash reg) nm))
-  ;; 带 alias 的类型统一生成 ctype 别名，避免 struct alias 被当成空结构体
-  (if (attr ty 'alias #f)
-      (list (alias->form nm (attr ty 'alias)))
-      (case (cat-of ty)
-        [(handle) (list (handle->form nm))]
-        [(basetype) (list (basetype->form nm))]
-        [(bitmask) (list (bitmask->form reg nm ty))]
-        [(enum) (list (enum->form nm ty))]
-        [(struct) (struct->form reg nm ty)]
-        [(union) (list (union->form reg nm ty))]
-        [(funcpointer) (list (funcpointer->form reg nm ty))]
-        [else '()])))
+(define (struct-form t)
+  (define nm (vk-type-name t))
+  (define layout (vk-type-layout t))
+  (define fields
+    (for/list ([f layout])
+      (cond [(vk-cfield? f) (list (vk-cfield-name f) (vk-cfield-ctype f))]
+            [else (list (vk-bitgroup-storage f) (vk-bitgroup-base-ctype f))])))
+  (define fields* (if (null? fields) (list (list '_dummy '_uint8)) fields))
+  (define accessors (append-map (λ (f) (if (vk-bitgroup? f) (bitgroup-accessors nm f) '())) layout))
+  (cons
+   `(define-cstruct ,(sym nm) ,fields*
+      #:malloc-mode 'zeroed-atomic-interior)
+   accessors))
 
-(define (type-forms reg sorted-types)
-  (append* (for/list ([nm (in-list sorted-types)]) (type-form reg nm))))
+(define (type-form t)
+  (cond
+    [(vk-type-alias t) (list `(define ,(sym (vk-type-name t)) ,(sym (vk-type-alias t))))]
+    [else
+     (case (vk-type-category t)
+       [(handle basetype bitmask enum)
+        (list `(define ,(sym (vk-type-name t)) ,(vk-type-ctype t)))]
+       [(struct) (struct-form t)]
+       [(union) (list `(define ,(sym (vk-type-name t)) (_union ,@(vk-type-union-ctypes t))))]
+       [(funcpointer)
+        (list `(define ,(sym (vk-type-name t))
+                 (_cprocedure (list ,@(vk-type-func-args t)) ,(vk-type-func-ret t))))]
+       [else '()])]))
 
-;; 只取指定类别的类型形式（生成层按 枚举/结构体 等分类时用）。
-;; 注意 types.inc 必须保持依赖顺序，所以整表仍走 type-forms。
-(define (type-forms-of reg sorted-types cats)
-  (append* (for/list ([nm (in-list sorted-types)]
-                      #:when (memq (type-category reg nm) cats))
-             (type-form reg nm))))
+(define (type-forms types)
+  (append* (for/list ([t (in-list types)]) (type-form t))))

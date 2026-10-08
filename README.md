@@ -33,14 +33,15 @@ racket-vulkan/
     manual.rkt                # (require vulkan/manual)    => 手动模式 = bindings + memory
     unsafe.rkt                # (require vulkan/unsafe)    => 已弃用别名（= manual）
     safe.rkt                  # (require vulkan/safe)      => 组合层总入口（原生名，不导出裸命令）
+    safe-support.rkt          # safe 糖运行期小工具（vk-read-handles / vk-cstring）
     glfw.rkt                  # (require vulkan/glfw)      => GLFW 窗口（与绑定无关）
     version.rkt               # (require vulkan/version)   => 绑定版本/provenance（vk-binding-version 等）
-    generated/                # 生成物（运行期需要；不要手改）
-      constants.inc           # VK_* 常量（整数）
-      types.inc               # _VkX ctype / define-cstruct
-      commands.inc            # (define-vk ...) 原始命令 + 分派层级（无错误策略）
-      safe.inc                # 糖：vkCreate*/vkGet*/vkCmd*（原生名，R1 返回值，含 check-vk-result）
-      pnext.inc               # vk-struct-sType / vk-pNext-setters 表
+    generated/                # 生成物（运行期需要；不要手改；均为真模块）
+      constants.rkt           # VK_* 常量（整数；无依赖）
+      types.rkt               # _VkX ctype / define-cstruct（require constants）
+      commands.rkt            # (define-vk ...) 原始命令 + 分派层级（require base）
+      safe.rkt                # 糖：vkCreate*/vkGet*/vkCmd*（原生名，R1 返回值，含 check-vk-result）
+      pnext.rkt               # vk-struct-sType / vk-pNext-setters 表
       facts.rkt               # 命令/参数事实（vk-command/vk-param），供组合层/测试消费
       version.rkt             # 绑定版本/provenance（vk-binding-version 等）
   vulkan-gen/                 # 集合 vulkan-gen：生成器（构建期，不参与运行期）
@@ -48,21 +49,22 @@ racket-vulkan/
     main.rkt                  # driver：解析 -> 生成 -> 输出（generate! + CLI）
     parse.rkt                 # 解析层：vk.xml -> vk-model（预定义常量/枚举/结构体/函数）
     generate.rkt              # 生成层：vk-model -> vk-artifact（模块依赖/模块体/导出）
-    module.rkt                # 模块三部分（deps/body/exports）+ 写出（.inc 体 / 完整模块）
+    module.rkt                # 模块三部分（deps/body/exports）+ 写出（真模块）
     template.rkt              # 模板加载：@@KEY@@ 字符串替换
+    model.rkt                 # 领域模型（vk-model/vk-type/vk-func）+ 诊断（自足）
     xexpr.rkt                 # 极简 XML 读取工具
     vk-registry.rkt           # 读 XML + feature/extension 依赖闭包
     extension-select.rkt      # 扩展选择：common / all / 逗号列表
     constants.rkt             # 常量值解析与排序
     ctype.rkt                 # C 类型 -> ctype + struct 成员解析
     facts-build.rkt           # XML -> vk-command / vk-param（运行期 IR）
-    emit-types.rkt            # types.inc（枚举/结构体/其它类型形式）
-    emit-commands.rkt         # commands.inc（函数形式）
+    emit-types.rkt            # types.rkt（枚举/结构体/其它类型形式）
+    emit-commands.rkt         # commands.rkt（函数形式）
     emit-api.rkt              # vulkan/generated/facts.rkt 模块体 + 输出
-    emit-pnext.rkt            # pnext.inc（sType / pNext setter 表）
+    emit-pnext.rkt            # pnext.rkt（sType / pNext setter 表）
     emit-version.rkt          # generated/version.rkt 模块体 + 输出
     classify.rkt              # 命令 -> (shape . plan)（纯函数）
-    emit-safe.rkt             # safe.inc（逐形状 emitter + 组合）
+    emit-safe.rkt             # safe.rkt（逐形状 emitter + 组合）
     templates/                # 外置模板程序（不嵌进 Racket 代码）
       module.rkt.tmpl         # 完整模块骨架（deps + body + exports）
       facts.rkt.tmpl          # generated/facts.rkt 骨架
@@ -70,7 +72,8 @@ racket-vulkan/
       abi_check.c.tmpl        # ABI 对照 C 程序骨架
     audit/                    # 审计产物（生成器输出，非运行期）
       abi_check.c             # ABI 对照 C 程序（core struct/union 的 sizeof/alignof）
-      unknown-types.txt       # 未知类型审计（退化成 _pointer 的类型；应为空）
+      unknown-types.txt       # 未知类型审计（降级为 _pointer 的类型；应为空）
+      diagnostics.txt         # 全部降级/跳过诊断（领域 + 实体 + 原因，不静默）
   registry/                   # 资源：Vulkan 注册表（生成器输入）
     vk-1.4.363.xml            # 生成基准（最新稳定 SDK tag）
     vk-1.4.309.xml            # 与本机 loader 对齐
@@ -94,6 +97,7 @@ racket-vulkan/
     memory-scope.rkt          # 生命周期令牌原语回归
     module-surface.rkt        # 命名契约（糖/裸命令模块隔离）回归
     gen-shapes.rkt            # classify 全量断言
+    gen-pipeline.rkt          # 流水线局部化：解析自足/可复现、四类划分、模块契约、快照
     safe-output.rkt           # 安全输出糖（单输出 / enumerate）
     safe-input.rkt            # 输入类糖（调用作用域 + 数组）
     abi.rkt                   # C sizeof/alignof ABI 对照
@@ -130,6 +134,7 @@ racket-vulkan/
 | `vulkan/manual` | 手动模式 = `bindings` + `memory`（裸命令 + arena，无错误策略） |
 | `vulkan/unsafe` | 已弃用别名（= `vulkan/manual`） |
 | `vulkan/safe` | 组合层总入口（`check-vk-result` + `vkCreate*`/`vkGet*`/`vkCmd*` 糖 + context/callback/pnext/capability/map），糖也是 Vulkan 原生名，**不导出裸命令** |
+| `vulkan/safe-support` | safe 糖运行期小工具（`vk-read-handles`/`vk-cstring`），被 `generated/safe.rkt` require |
 | `vulkan` | facade：糖（原生名）+ 类型/常量/原子，裸命令以 `raw:` 前缀 |
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） |
 | `vulkan/generated/facts` | 命令/参数事实数据（`vk-command-facts`），供组合层/测试消费 |
@@ -208,12 +213,14 @@ racket vulkan-gen/main.rkt
 
 参数：`<vk.xml> <out-dir> <feature> [扩展] [audit-dir]`。
 
-- 生成后会**清理已知陈旧产物**（如重命名前的 `api.rkt`、从 out-dir 移出的审计文件），只碰已知名字，不动 `compiled/` 或其它文件。
+- 生成后会**清理已知陈旧产物**（如 `api.rkt`、`.inc` 时代产物、从 out-dir 移出的审计文件），只碰已知名字，不动 `compiled/` 或其它文件。
 
 - 第 4 个参数是扩展选择：`common`（常用集）/ `all`（所有 includable）/ 逗号分隔名单 / 空。
 - 第 5 个参数是审计产物目录（默认 `vulkan-gen/audit/`）。
-- 生成后会在 audit 目录写 `unknown-types.txt`：任何退化成 `_pointer` 的未知类型名（应为空）；
+- 生成后在 audit 目录写三份审计：`unknown-types.txt`（降级为 `_pointer` 的类型，应为空）、
+  `diagnostics.txt`（全部降级/跳过诊断：领域 + 实体 + 原因，不静默）、`abi_check.c`（ABI 对照）。
   设 `VULKAN_GEN_STRICT=1` 时未知类型直接报错（用于加扩展前审计）。
+- 输出是**原子**的：先把全部产物渲染成字符串，全部成功后才逐个（.tmp + rename）落盘。
 
 - 第 3 个参数是目标 feature；生成器沿 `depends` 展开依赖闭包
   （`VK_VERSION_1_4` → 全部 `VK_*_VERSION_1_0..1_4`）。
@@ -308,7 +315,7 @@ GLFW 用 `glfwCreateWindowSurface` 在 X11/Wayland/Windows/macOS 上直接建表
 
 ## 安全层（推荐用法）
 
-`generated/safe.inc` 为 create/allocate 命令生成包装（destroy/free、单输出 `vkGet*`、
+`generated/safe.rkt` 为 create/allocate 命令生成包装（destroy/free、单输出 `vkGet*`、
 数组输出 `vkEnumerate*`、输入类 `vkCmd*` 等形状也一并生成）：
 
 ```racket
@@ -371,7 +378,7 @@ GLFW 用 `glfwCreateWindowSurface` 在 X11/Wayland/Windows/macOS 上直接建表
 
 ## pNext / sType
 
-`generated/pnext.inc` 提供两张表；糖层对应两个辅助：
+`generated/pnext.rkt` 提供两张表；糖层对应两个辅助：
 
 ```racket
 (require vulkan)

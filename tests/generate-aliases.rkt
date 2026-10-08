@@ -6,7 +6,7 @@
 ;;   * alias 命令（vk.xml 里无 <proto>）必须按目标命令签名生成
 ;;   * 运行时 ctype 别名等价、alias 命令可调用
 ;;
-;; 用一个临时目录重新跑一遍生成器，断言其输出，避免依赖已提交的 .inc。
+;; 用一个临时目录重新跑一遍生成器，断言其输出，避免依赖已提交的 .rkt。
 ;; ============================================================
 
 (require rackunit
@@ -50,14 +50,14 @@
 
 ;; 1. 不允许出现退化的占位结构体（原 struct alias 会生成 ((_dummy _uint8))）
 (define (check-no-placeholder-types)
-  (define types (generated-lines "types.inc"))
+  (define types (generated-lines "types.rkt"))
   (check-equal? (filter (λ (l) (string-contains? l "_dummy")) types)
                 '()
                 "generated types must not contain _dummy placeholders"))
 
 ;; 2. 所有 _Vk 别名目标都必须已定义，且在别名之前
 (define (check-alias-type-order)
-  (define types (generated-lines "types.inc"))
+  (define types (generated-lines "types.rkt"))
   (define defined (make-hash))
   (for ([l (in-list types)] [i (in-naturals)])
     (define m (regexp-match #px"^\\(define(?:-cstruct)? (_[A-Za-z0-9]+)" l))
@@ -82,7 +82,7 @@
     "vkGetPhysicalDeviceSparseImageFormatProperties2KHR"))
 
 (define (check-alias-commands)
-  (define cmds (generated-lines "commands.inc"))
+  (define cmds (generated-lines "commands.rkt"))
   (for ([c (in-list required-alias-commands)])
     (check-true
      (for/or ([l (in-list cmds)])

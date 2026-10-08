@@ -9,9 +9,14 @@
 (require ffi/unsafe
          ffi/unsafe/define
          racket/promise
-         racket/include)
+         "generated/constants.rkt"
+         "generated/types.rkt"
+         "generated/pnext.rkt")
 
-(provide (all-defined-out))
+(provide (all-defined-out)
+         (all-from-out "generated/constants.rkt")
+         (all-from-out "generated/types.rkt")
+         (all-from-out "generated/pnext.rkt"))
 
 ;; ------------------------------------------------------------------
 ;; libvulkan
@@ -174,7 +179,8 @@
         'name))]))
 
 ;; ------------------------------------------------------------------
-;; 类型/常量（命令见 vulkan/commands.rkt）
-(include "generated/constants.inc")
-(include "generated/types.inc")
-(include "generated/pnext.inc")
+;; 类型/常量/pnext 由生成的真模块提供（命令见 vulkan/commands.rkt）：
+;;   generated/constants.rkt  VK_* 常量
+;;   generated/types.rkt      _VkX ctype / define-cstruct
+;;   generated/pnext.rkt      vk-struct-sType / vk-pNext-setters
+;; 这里 require 后 re-export，保持 vulkan/base 的公开表面不变。

@@ -1,6 +1,6 @@
 #lang racket/base
 ;; ============================================================
-;; safe.inc 的逐形状 emitter：只吃 vk-plan，返回 (define ...) 形式列表。
+;; safe.rkt 的逐形状 emitter：只吃 vk-plan，返回 (define ...) 形式列表。
 ;;
 ;; 每个 shape 一个函数，互不引用；共享小工具（ctype/checked-call）独立。
 ;; 组合由 emit-safe-forms 完成。

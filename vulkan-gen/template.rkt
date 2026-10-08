@@ -17,6 +17,12 @@
   (file->string path))
 
 ;; subs : (listof (cons string string))，键不带 @@。
+;; 替换后若仍有 @@KEY@@ 残留（缺 key / 拼写错），立即报错——不静默产出非法文件。
 (define (fill-template tmpl subs)
-  (for/fold ([s tmpl]) ([kv (in-list subs)])
-    (string-replace s (format "@@~a@@" (car kv)) (cdr kv))))
+  (define out
+    (for/fold ([s tmpl]) ([kv (in-list subs)])
+      (string-replace s (format "@@~a@@" (car kv)) (cdr kv))))
+  (define leftover (regexp-match #px"@@[A-Za-z0-9_]+@@" out))
+  (when leftover
+    (error 'fill-template "template placeholder not substituted: ~a" (car leftover)))
+  out)

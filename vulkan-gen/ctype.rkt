@@ -7,18 +7,17 @@
 (require racket/list
          racket/string
          "xexpr.rkt"
-         "vk-registry.rkt")
+         "vk-registry.rkt"
+         "model.rkt")
 
 (provide base-ctype basetype-map platform-ctype
-         base-c-type-name category-of type-category ctype-of-type-name
+         base-c-type-name category-of ctype-of-type-name
          member-name members-of member-type-text member-signature member-text
          pointer-member? array-member? array-dims bitfield-member? bitfield-width
          member-base-name member-ctype-expr
          params-of pointer-param? param-ctype
          type-dependencies find-count-field
-         (struct-out vk-cfield) (struct-out vk-bitgroup)
-         struct-layout bitmask-64?
-         current-unknown-type)
+         struct-layout bitmask-64?)
 
 (define base-ctype
   (hash "void" '_void "char" '_byte "signed char" '_int8 "unsigned char" '_uint8
@@ -69,22 +68,14 @@
                        (if (symbol? nm) nm (string->symbol nm)) #f))
   (and ty (cat-of ty)))
 
-;; 生成分类用的规范类别：带 alias 的类型单独归为 'alias（alias 目标单独定义）。
-(define (type-category reg nm)
-  (define ty (hash-ref (registry-types-hash reg)
-                       (if (symbol? nm) nm (string->symbol nm)) #f))
-  (and ty (if (attr ty 'alias #f) 'alias (cat-of ty))))
-
 ;; ------------------------------------------------------------------
-;; 未知类型审计：ctype-of-type-name 退化成 _pointer 时**通过回调上报**，
-;; 状态由调用方（driver）持有——本模块无全局。
-(define current-unknown-type (make-parameter #f))
-(define (mark-unknown! nm)
-  (define f (current-unknown-type))
-  (when f (f nm))
+;; 未知类型审计：ctype-of-type-name 退化成 _pointer 时**通过显式 diags 收集器上报**，
+;; 状态由调用方（parse）持有并返回——本模块无全局。
+(define (unknown! diags nm reason)
+  (when diags (diagnose! diags 'warn 'type nm reason))
   '_pointer)
 
-(define (ctype-of-type-name reg nm)
+(define (ctype-of-type-name reg nm [diags #f])
   (cond
     [(hash-has-key? base-ctype nm) (hash-ref base-ctype nm)]
     [(hash-has-key? basetype-map nm) (hash-ref basetype-map nm)]
@@ -92,9 +83,9 @@
     [(hash-has-key? (registry-types-hash reg) (string->symbol nm))
      (case (category-of reg (string->symbol nm))
        [(struct union enum bitmask handle funcpointer) (string->symbol (format "_~a" nm))]
-       [(basetype) (hash-ref basetype-map nm (λ () (mark-unknown! nm)))]
-       [else (mark-unknown! nm)])]
-    [else (mark-unknown! nm)]))
+       [(basetype) (hash-ref basetype-map nm (λ () (unknown! diags nm "basetype not in basetype-map")))]
+       [else (unknown! diags nm "unhandled type category")])]
+    [else (unknown! diags nm "unknown type; degraded to _pointer")]))
 
 ;; ------------------------------------------------------------------
 ;; 成员解析
@@ -129,25 +120,25 @@
   (and mm (string->number (cadr mm))))
 (define (member-base-name m) (base-c-type-name (member-type-text m)))
 
-(define (member-ctype-expr reg m)
+(define (member-ctype-expr reg m [diags #f])
   (define base (member-base-name m))
   (cond
     [(pointer-member? m) '_pointer]
     [(array-member? m)
      (define dims (array-dims m))
-     (if (null? dims) '_pointer `(_array ,(ctype-of-type-name reg base) ,@dims))]
+     (if (null? dims) '_pointer `(_array ,(ctype-of-type-name reg base diags) ,@dims))]
     ;; 结构体里的函数指针成员用 _pointer：由 vk-callback 提供稳定指针，
     ;; 避免把同一 Racket 过程重复转成不同 trampoline 而丢失保活。
     [(eq? (category-of reg (string->symbol base)) 'funcpointer) '_pointer]
-    [else (ctype-of-type-name reg base)]))
+    [else (ctype-of-type-name reg base diags)]))
 
 ;; ------------------------------------------------------------------
 ;; 命令参数（<param>）解析；funcpointer 的 <proto>/<param> 也走这里。
 (define (params-of c)
   (filter (λ (x) (and (xelem? x) (eq? (xtag x) 'param) (api-ok? x))) (xcontent c)))
 (define (pointer-param? p) (regexp-match? #px"\\*" (member-signature p)))
-(define (param-ctype reg p)
-  (if (pointer-param? p) '_pointer (ctype-of-type-name reg (member-base-name p))))
+(define (param-ctype reg p [diags #f])
+  (if (pointer-param? p) '_pointer (ctype-of-type-name reg (member-base-name p) diags)))
 
 ;; by-value 依赖（原始类型名，用于拓扑排序/闭包）
 (define (type-dependencies reg nm)
@@ -180,11 +171,7 @@
 
 ;; ------------------------------------------------------------------
 ;; 位域布局：Racket define-cstruct 不支持 C 位域，故把「一个存储单元」内的
-;; 连续位域打包成一个底层整型字段；另生成掩码/移位访问器。
-(struct vk-cfield (name ctype) #:transparent)
-;; bits：((member-name offset width) ...)，offset 是单元内位偏移
-(struct vk-bitgroup (storage base-ctype bits) #:transparent)
-
+;; 连续位域打包成一个底层整型字段（vk-cfield / vk-bitgroup 定义在 model.rkt）。
 ;; 原子类型位宽（避免在生成期依赖 ffi/unsafe 的 ctype 值）
 (define primitive-bits
   (hash "char" 8 "signed char" 8 "unsigned char" 8 "int8_t" 8 "uint8_t" 8 "_Bool" 8
@@ -213,7 +200,7 @@
        [else 32])]))
 
 ;; 把一个 struct 的成员归约成：普通字段 / 位域打包单元（保持顺序与原布局）。
-(define (struct-layout reg ty)
+(define (struct-layout reg ty [diags #f])
   (define members (filter member-name (members-of ty)))
   (define counter (box 0))
   (define (take-run ms unit-bits)
@@ -236,7 +223,7 @@
        (define-values (bits rest) (take-run ms unit-bits))
        (define storage (string->symbol (format "_bits~a" (unbox counter))))
        (set-box! counter (add1 (unbox counter)))
-       (loop rest (cons (vk-bitgroup storage (ctype-of-type-name reg base) bits) out))]
+       (loop rest (cons (vk-bitgroup storage (ctype-of-type-name reg base diags) bits) out))]
       [else
        (define m (car ms))
-       (loop (cdr ms) (cons (vk-cfield (string->symbol (member-name m)) (member-ctype-expr reg m)) out))])))
+       (loop (cdr ms) (cons (vk-cfield (string->symbol (member-name m)) (member-ctype-expr reg m diags)) out))])))

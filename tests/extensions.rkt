@@ -47,8 +47,8 @@
 (check-equal? (file->string (build-path audit "unknown-types.txt")) ""
               "all extensions must have no unknown types")
 
-(define types (file->lines (build-path out "types.inc")))
-(define cmds (file->lines (build-path out "commands.inc")))
+(define types (file->lines (build-path out "types.rkt")))
+(define cmds (file->lines (build-path out "commands.rkt")))
 (define (has? lines s) (for/or ([l (in-list lines)]) (string-contains? l s)))
 
 ;; 3. 代表性类型/命令已生成
@@ -58,7 +58,7 @@
 (check-true (has? cmds "(define-vk vkCreateAccelerationStructureKHR "))
 
 ;; 3b. 常量解析：~N 位取反 + 字符串扩展名
-(define consts (file->lines (build-path out "constants.inc")))
+(define consts (file->lines (build-path out "constants.rkt")))
 (check-true (has? consts "(define VK_QUEUE_FAMILY_EXTERNAL 4294967294)"))
 (check-true (has? consts "(define VK_QUEUE_FAMILY_FOREIGN_EXT 4294967293)"))
 (check-true (has? consts "VK_KHR_SURFACE_EXTENSION_NAME #\"VK_KHR_surface\""))

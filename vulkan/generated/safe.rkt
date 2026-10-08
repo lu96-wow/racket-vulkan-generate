@@ -1,3 +1,5 @@
+#lang racket/base
+(require ffi/unsafe vulkan/base (prefix-in raw: vulkan/commands) vulkan/memory vulkan/result vulkan/context vulkan/safe-support)
 (define (vkCreateGraphicsPipelines device make-info pipelineCache pAllocator) (define a (make-vk-arena)) (define-values (r out n) (parameterize ((current-vk-arena a)) (define infos (make-info)) (define n (vector-length infos)) (define info (vk-struct-array _VkGraphicsPipelineCreateInfo (vector->list infos))) (define o (vk-malloc _VkPipeline n)) (values (check-vk-result (raw:vkCreateGraphicsPipelines device pipelineCache n info pAllocator o) (quote vkCreateGraphicsPipelines)) o n))) (define hs (vk-read-handles out _VkPipeline n)) (for ((h hs)) (vk-handle-arena-set! h a)) (values r hs))
 (define (vkCreateFramebuffer device make-info pAllocator) (define a (make-vk-arena)) (define-values (r out) (parameterize ((current-vk-arena a)) (define info (make-info)) (define o (vk-malloc _VkFramebuffer)) (values (check-vk-result (raw:vkCreateFramebuffer device info pAllocator o) (quote vkCreateFramebuffer)) o))) (define h (ptr-ref out _VkFramebuffer)) (vk-handle-arena-set! h a) (values r h))
 (define (vkCreateRenderPass device make-info pAllocator) (define a (make-vk-arena)) (define-values (r out) (parameterize ((current-vk-arena a)) (define info (make-info)) (define o (vk-malloc _VkRenderPass)) (values (check-vk-result (raw:vkCreateRenderPass device info pAllocator o) (quote vkCreateRenderPass)) o))) (define h (ptr-ref out _VkRenderPass)) (vk-handle-arena-set! h a) (values r h))
@@ -125,3 +127,5 @@
 (define (vkCmdExecuteCommands commandBuffer v) (define a (make-vk-arena)) (parameterize ((current-vk-arena a)) (define info (vk-struct-array _VkCommandBuffer (vector->list v))) (raw:vkCmdExecuteCommands commandBuffer (vector-length v) info)))
 (define (vkCmdSetViewportWithCount commandBuffer v) (define a (make-vk-arena)) (parameterize ((current-vk-arena a)) (define info (vk-struct-array _VkViewport (vector->list v))) (raw:vkCmdSetViewportWithCount commandBuffer (vector-length v) info)))
 (define (vkCmdSetScissorWithCount commandBuffer v) (define a (make-vk-arena)) (parameterize ((current-vk-arena a)) (define info (vk-struct-array _VkRect2D (vector->list v))) (raw:vkCmdSetScissorWithCount commandBuffer (vector-length v) info)))
+(provide (all-defined-out))
+

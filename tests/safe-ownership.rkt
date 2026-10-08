@@ -16,10 +16,10 @@
          vulkan/context)
 
 (define-runtime-path here ".")
-(define safe-inc (build-path here ".." "vulkan" "generated" "safe.inc"))
+(define safe-rkt (build-path here ".." "vulkan" "generated" "safe.rkt"))
 
 (define (wrapper-source name)
-  (for/first ([l (in-list (file->lines safe-inc))]
+  (for/first ([l (in-list (file->lines safe-rkt))]
               #:when (string-contains? l (format "(define (~a " name)))
     l))
 

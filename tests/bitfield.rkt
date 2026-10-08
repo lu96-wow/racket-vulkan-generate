@@ -43,7 +43,7 @@
 
 (check-equal? (run-generator) 0 "generator should exit 0")
 
-(define types (file->lines (build-path out "types.inc")))
+(define types (file->lines (build-path out "types.rkt")))
 (define (has? s) (for/or ([l (in-list types)]) (string-contains? l s)))
 
 ;; 1. 多维数组保留全部维度
