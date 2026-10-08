@@ -14,7 +14,7 @@ OpenGL 绑定（`racket/opengl` 的 `readspec.rkt` + `main.rkt`）。
 racket-vulkan/
   info.rkt                    # 多集合包元数据（collection 'multi）
   rebuild.rkt                 # 构建脚本：racket rebuild.rkt [vk.xml]（生成 + raco make）
-  vulkan/                     # 集合 vulkan：绑定
+  vulkan/                     # 集合 vulkan：运行期绑定（最终目标）
     info.rkt
     main.rkt                  # (require vulkan)           => facade：糖 + 类型/常量/原子 + raw: 裸命令
     base.rkt                  # (require vulkan/base)      => 类型/常量/分派设施（无命令）
@@ -33,35 +33,36 @@ racket-vulkan/
     unsafe.rkt                # (require vulkan/unsafe)    => 已弃用别名（= manual）
     safe.rkt                  # (require vulkan/safe)      => 组合层总入口（原生名，不导出裸命令）
     glfw.rkt                  # (require vulkan/glfw)      => GLFW 窗口（与绑定无关）
-    generate.rkt              # 生成器 CLI 入口（解析 argv -> generator/main）
-    generator/
-      xexpr.rkt               # 极简 XML 读取工具
-      vk-registry.rkt         # 读 XML + feature/extension 依赖闭包
-      extension-select.rkt    # 扩展选择：common / all / 逗号列表
-      constants.rkt           # 常量值解析与排序
-      ctype.rkt               # C 类型 -> ctype + struct 成员解析
-      facts-build.rkt         # XML -> vk-command / vk-param（运行期 IR）
-      emit-types.rkt          # types.inc
-      emit-commands.rkt       # commands.inc
-      emit-api.rkt            # generated/facts.rkt 数据序列化
-      emit-pnext.rkt          # pnext.inc（sType / pNext setter 表）
-      classify.rkt            # 命令 -> (shape . plan)（纯函数）
-      emit-safe.rkt           # safe.inc（逐形状 emitter + 组合）
-      main.rkt                # 生成器主体（generate!，可当库调用）
-    generated/
+    generated/                # 生成物（运行期需要；不要手改）
       constants.inc           # VK_* 常量（整数）
       types.inc               # _VkX ctype / define-cstruct
       commands.inc            # (define-vk ...) 原始命令 + 分派层级（无错误策略）
       safe.inc                # 糖：vk-create-*/vk-get-*/vk-cmd-*（R1 返回值，含 check-vk-result）
       pnext.inc               # vk-struct-sType / vk-pNext-setters 表
       facts.rkt               # 命令/参数事实（vk-command/vk-param），供组合层/测试消费
+  vulkan-gen/                 # 集合 vulkan-gen：生成器（构建期，不参与运行期）
+    info.rkt
+    main.rkt                  # generate! + CLI（racket vulkan-gen/main.rkt [args]）
+    xexpr.rkt                 # 极简 XML 读取工具
+    vk-registry.rkt           # 读 XML + feature/extension 依赖闭包
+    extension-select.rkt      # 扩展选择：common / all / 逗号列表
+    constants.rkt             # 常量值解析与排序
+    ctype.rkt                 # C 类型 -> ctype + struct 成员解析
+    facts-build.rkt           # XML -> vk-command / vk-param（运行期 IR）
+    emit-types.rkt            # types.inc
+    emit-commands.rkt         # commands.inc
+    emit-api.rkt              # vulkan/generated/facts.rkt 数据序列化
+    emit-pnext.rkt            # pnext.inc（sType / pNext setter 表）
+    classify.rkt              # 命令 -> (shape . plan)（纯函数）
+    emit-safe.rkt             # safe.inc（逐形状 emitter + 组合）
+    audit/                    # 审计产物（生成器输出，非运行期）
       abi_check.c             # ABI 对照 C 程序（core struct/union 的 sizeof/alignof）
       unknown-types.txt       # 未知类型审计（退化成 _pointer 的类型；应为空）
-    registry/
-      vk-1.4.363.xml          # 生成基准（最新稳定 SDK tag）
-      vk-1.4.309.xml          # 与本机 loader 对齐
-      vk-main.xml             # 上游 main（含未定稿扩展）
-    experiments/              # 前期调研脚本 + 2019 旧绑定对照（不参与编译）
+  registry/                   # 资源：Vulkan 注册表（生成器输入）
+    vk-1.4.363.xml            # 生成基准（最新稳定 SDK tag）
+    vk-1.4.309.xml            # 与本机 loader 对齐
+    vk-main.xml               # 上游 main（含未定稿扩展）
+  experiments/                # 前期调研脚本 + 2019 旧绑定对照（不参与编译）
   tests/
     smoke.rkt                 # 建 instance + 枚举物理设备 + 读属性
     device.rkt                # 建逻辑设备 + 经 GDPA 调 device 级命令
@@ -84,7 +85,8 @@ racket-vulkan/
     safe-input.rkt            # 输入类糖（调用作用域 + 数组）
     abi.rkt                   # C sizeof/alignof ABI 对照
     bitfield.rkt              # bitfield 存储单元打包 + 多维数组布局回归
-    extensions.rkt            # 扩展选择（common/all）+ 未知类型审计回归
+    extensions.rkt            # 扩展选择（common/all）+ 未知类型/常量解析审计回归
+    constants.rkt             # 常量值解析（~N 位取反 + 字符串扩展名）回归
     callback.rkt              # 回调保活（稳定指针 / arena 保活 / 往返调用）
     pnext.rkt                 # pNext/sType（vk-struct 自动 sType + vk-chain! 保活）
     capability.rkt            # vk-proc-available? + 扩展枚举 + unavailable 异常
@@ -116,7 +118,7 @@ racket-vulkan/
 | `vulkan` | facade：糖（原生名）+ 类型/常量/原子，裸命令以 `raw:` 前缀 |
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） |
 | `vulkan/generated/facts` | 命令/参数事实数据（`vk-command-facts`），供组合层/测试消费 |
-| `vulkan/generator/*` | 生成器内部：`vk-registry`/`extension-select`/`constants`/`ctype`/`facts-build`/`emit-*`/`classify`/`main` |
+| `vulkan-gen/*` | 生成器（构建期，不参与运行期）：`vk-registry`/`extension-select`/`constants`/`ctype`/`facts-build`/`emit-*`/`classify`/`main` |
 | `vulkan/glfw` | GLFW 窗口，与绑定无关 |
 
 > **命名靠模块隔离（方案 A）**：`vulkan/safe` 的 `vkCreateBuffer` 是糖（builder），
@@ -130,22 +132,22 @@ racket-vulkan/
 ```bash
 # 一条命令重建（生成 + 清旧 .zo + raco make，默认配方 = 仓库提交的绑定）
 racket rebuild.rkt                                  # 省略 xml 用 registry/vk-1.4.363.xml
-racket rebuild.rkt vulkan/registry/vk-1.4.363.xml   # 也可显式指定 xml 路径
+racket rebuild.rkt registry/vk-1.4.363.xml          # 也可显式指定 xml 路径
 
 # 等价于手动两段：
 EXTS="VK_KHR_surface,VK_KHR_swapchain,VK_KHR_xcb_surface,VK_KHR_xlib_surface,\
 VK_KHR_wayland_surface,VK_EXT_debug_utils,VK_KHR_get_physical_device_properties2,\
 VK_KHR_get_surface_capabilities2,VK_KHR_display,VK_EXT_headless_surface"
-racket vulkan/generate.rkt vulkan/registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 "$EXTS"
+racket vulkan-gen/main.rkt registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 "$EXTS"
 
 # 常用集（= 上面 10 个）：
-racket vulkan/generate.rkt vulkan/registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 common
+racket vulkan-gen/main.rkt registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 common
 # 所有 includable 扩展（非 provisional / 非 disabled）：
-racket vulkan/generate.rkt vulkan/registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 all
+racket vulkan-gen/main.rkt registry/vk-1.4.363.xml vulkan/generated VK_VERSION_1_4 all
 
 # 省略参数则用默认配方（= 提交的绑定，故 no-arg 可复现 generated/）：
-#   registry/vk-1.4.363.xml -> generated/  VK_VERSION_1_4  common
-racket vulkan/generate.rkt
+#   registry/vk-1.4.363.xml -> vulkan/generated  VK_VERSION_1_4  common
+racket vulkan-gen/main.rkt
 ```
 
 > 重新生成后请重建编译产物（`compiled/` 已被 gitignore，但本地可能残留旧 `.zo`）：
@@ -153,10 +155,11 @@ racket vulkan/generate.rkt
 > 或直接删除 `vulkan/compiled/`、`tests/compiled/`。
 > 否则可能仍加载旧绑定（表现为新命令/类型 “unbound identifier”）。
 
-参数：`<vk.xml> <out-dir> <feature> [扩展]`。
+参数：`<vk.xml> <out-dir> <feature> [扩展] [audit-dir]`。
 
 - 第 4 个参数是扩展选择：`common`（常用集）/ `all`（所有 includable）/ 逗号分隔名单 / 空。
-- 生成后会写 `generated/unknown-types.txt`：任何退化成 `_pointer` 的未知类型名（应为空）；
+- 第 5 个参数是审计产物目录（默认 `vulkan-gen/audit/`）。
+- 生成后会在 audit 目录写 `unknown-types.txt`：任何退化成 `_pointer` 的未知类型名（应为空）；
   设 `VULKAN_GEN_STRICT=1` 时未知类型直接报错（用于加扩展前审计）。
 
 - 第 3 个参数是目标 feature；生成器沿 `depends` 展开依赖闭包

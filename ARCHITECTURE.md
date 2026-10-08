@@ -53,8 +53,20 @@ Vulkan 对 host 内存的持有方式（决定需要多长的生命周期）：
 
 ## 2. 模块、依赖与命名
 
+三个顶层角色（目录 = 集合，依赖单向）：
+
+| 角色 | 位置 | 依赖 | 参与运行期 |
+|------|------|------|:---:|
+| 资源 | `registry/*.xml` | 无（纯数据） | ✗ |
+| 生成器 | `vulkan-gen/` | `vulkan/api-facts`（IR 契约）+ 资源 | ✗（构建期） |
+| 最终目标 | `vulkan/` | 无（用已提交的 `generated/`） | ✓ |
+
+生成器输出分开：运行期需要的 `*.inc`/`facts.rkt` → `vulkan/generated/`；
+审计产物 `abi_check.c`/`unknown-types.txt` → `vulkan-gen/audit/`。
+`vulkan` 对 `vulkan-gen`/`registry` 零引用——删掉后两者，运行期仍可编译运行。
+
 ```
-registry/*.xml ──(generator/main.rkt)──▶ generated/{constants,types,commands,safe,pnext}.inc + facts.rkt
+registry/*.xml ──(vulkan-gen/main.rkt)──▶ vulkan/generated/{constants,types,commands,safe,pnext}.inc + facts.rkt
                                          │
      ┌───────────────────────────────────┼────────────────────────────┐
      ▼                                   ▼                            ▼
@@ -94,7 +106,7 @@ registry/*.xml ──(generator/main.rkt)──▶ generated/{constants,types,co
 | `vulkan/unsafe` | 已弃用别名（= `vulkan/manual`） | — |
 | `vulkan/safe` | 组合层总入口：`check-vk-result` + `vk-create-*`/`vk-destroy-*` + context/callback/pnext/capability/map | 裸命令（靠模块隔离区分） |
 | `vulkan/api-facts` | 运行期 API 事实 IR（`vk-param`/`vk-command`） | 生成逻辑、策略 |
-| `vulkan/generator/*` | 生成器：`vk-registry`（读 XML + 闭包）/ `extension-select`（common/all）/ `constants` / `ctype` / `facts-build` / `emit-*` / `classify` / `main` | 运行期依赖 |
+| `vulkan-gen/*` | 生成器（构建期，不参与运行期）：`vk-registry`（读 XML + 闭包）/ `extension-select`（common/all）/ `constants` / `ctype` / `facts-build` / `emit-*` / `classify` / `main` | 运行期依赖 |
 | `vulkan`（main） | facade：挑选/重命名导出 | 逻辑 |
 
 依赖方向单向、无环。
@@ -157,10 +169,10 @@ registry/*.xml ──(generator/main.rkt)──▶ generated/{constants,types,co
 | 测试文件 | `tests/arena-test.rkt` | `tests/memory-arena.rkt` |
 | 结果/枚举支撑模块 | `vulkan/support.rkt` | `vulkan/result.rkt` |
 | 窗口模块（GLFW） | `vulkan/window.rkt` | `vulkan/glfw.rkt` |
-| safe.inc emitter | `generator/emit.rkt` | `generator/emit-safe.rkt` |
-| 扩展选择 | `generator/extensions.rkt` | `generator/extension-select.rkt` |
-| 注册表加载 | `generator/registry.rkt` | `generator/vk-registry.rkt` |
-| 生成器主体 / CLI | `generate.rkt`（全部） | `generator/main.rkt` + `generate.rkt`（仅 argv） |
+| safe.inc emitter | `vulkan-gen/emit.rkt` | `vulkan-gen/emit-safe.rkt` |
+| 扩展选择 | `vulkan-gen/extensions.rkt` | `vulkan-gen/extension-select.rkt` |
+| 注册表加载 | `vulkan-gen/registry.rkt` | `vulkan-gen/vk-registry.rkt` |
+| 生成器主体 / CLI | `vulkan/generate.rkt`（全部） | `vulkan-gen/main.rkt`（`generate!` + `module+ main` CLI） |
 | 事实数据 | `generated/api.rkt` | `generated/facts.rkt` |
 | 安全糖测试 | `tests/auto-input.rkt` / `auto-output.rkt` | `tests/safe-input.rkt` / `safe-output.rkt` |
 
@@ -271,7 +283,7 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 - **G1**：alias 已解析；**bitfield 已按存储单元打包**成底层整型字段（`_bitsN`），
   并生成掩码/移位访问器（`VkX-<field>` / `set-VkX-<field>!`）；**多维数组保留全部维度**
   （`float matrix[3][4]` → `(_array _float 3 4)`）。由 `tests/bitfield.rkt` 锁定。
-- **G2**：未识别类型不再静默：`ctype-of-type-name` 记录到 `generated/unknown-types.txt`，
+- **G2**：未识别类型不再静默：`ctype-of-type-name` 记录到 `vulkan-gen/audit/unknown-types.txt`，
   可用 `VULKAN_GEN_STRICT=1` 报错。当前 `common` 与 `all` 均 **0 未知类型**
   （Win32 / DirectFB / NvSci / StdVideo 等外部类型已映射进 `platform-ctype`）。
 
@@ -466,8 +478,8 @@ XML ─vk-registry─▶ facts-build ─▶ vk-command ─classify─▶ (shape 
 模块：`xexpr`（XML 工具）/ `vk-registry`（读 XML + feature/extension 闭包）/
 `extension-select`（扩展选择）/ `constants`（常量）/ `ctype`（类型映射 + 成员）/
 `facts-build`（XML→IR）/ `emit-types`、`emit-commands`、`emit-api`、`emit-pnext`（各产出）/
-`classify` + `emit-safe`（safe.inc）。`generator/main.rkt` 做参数闭包/拓扑排序/写文件；
-`generate.rkt` 仅解析 argv 后调 `generate!`。
+`classify` + `emit-safe`（safe.inc）。`vulkan-gen/main.rkt` 做参数闭包/拓扑排序/写文件；
+CLI 是它的 `module+ main`（`racket vulkan-gen/main.rkt [args]`）。
 
 **1) 分类（纯函数）**：`(classify cmd) -> (values shape plan)`。
 固定枚举的 shape（固定签名匹配，按表顺序先到先得）：
@@ -611,3 +623,5 @@ base/memory **没有模块级可变全局**；需要「默认/共享」的状态
 | N5 ✅ | 默认语义收敛：owner 标记保证 per-thread 隔离；`vk-use-*` 同步更新当前 context | 全部 |
 | N6 ✅ | 模块命名收敛：`support`→`result`、`window`→`glfw`、`emit`→`emit-safe`、`extensions`→`extension-select`、`registry`→`vk-registry`、`generated/api`→`facts`、`auto-*`测试→`safe-*`；`command->datum` 拆到 `emit-api`；生成器主体移 `generator/main` 留薄 CLI；纠正 handle↔arena 归属（memory→context） | 全部 |
 | N7 ✅ | 生成默认对齐提交配方（`VK_VERSION_1_4` + `common`，no-arg 可复现 `generated/`）；`#f` 哨兵区分“未给”与“显式空”；打印生效参数；新增 Racket 构建脚本 `rebuild.rkt [vk.xml]` | generate |
+| N8 ✅ | 常量解析补齐：`~N` 位取反（含 `~1U`/`~2U`）+ 字符串枚举值（`VK_*_EXTENSION_NAME` → bytes）；`tests/constants.rkt` | generate |
+| N9 ✅ | 资源/生成器/目标分层：`vulkan/generator/`→`vulkan-gen/` 集合、`vulkan/registry/`→`registry/`、审计产物→`vulkan-gen/audit/`、`vulkan/experiments/`→`experiments/`；生成器 CLI 合入 `vulkan-gen/main.rkt`；运行期公共路径不变 | 全部 |

@@ -20,9 +20,10 @@
 
 (define-runtime-path here ".")
 (define project-root (simplify-path (build-path here "..")))
-(define gen (build-path project-root "vulkan" "generate.rkt"))
-(define reg (build-path project-root "vulkan" "registry" "vk-1.4.363.xml"))
+(define gen (build-path project-root "vulkan-gen" "main.rkt"))
+(define reg (build-path project-root "registry" "vk-1.4.363.xml"))
 (define out (make-temporary-file "vkbf-~a" 'directory))
+(define audit (make-temporary-file "vkbf-audit-~a" 'directory))
 
 (define (run-capture prog . args)
   (define o (open-output-string))
@@ -36,7 +37,7 @@
   (parameterize ([current-error-port (open-output-nowhere)])
     (system*/exit-code racket-exe (path->string gen) (path->string reg)
                        (path->string out) "VK_VERSION_1_4"
-                       "VK_KHR_acceleration_structure")))
+                       "VK_KHR_acceleration_structure" (path->string audit))))
 
 (check-equal? (run-generator) 0 "generator should exit 0")
 

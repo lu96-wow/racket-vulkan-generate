@@ -1,9 +1,9 @@
 #lang racket/base
 ;; ============================================================
-;; 生成器主体：vk.xml -> generated/*。
+;; 生成器主体：vk.xml -> vulkan/generated/*（+ vulkan-gen/audit/*）。
 ;;
-;; 当库用（`require` 无副作用，调用 `generate!` 才生成）；CLI 入口见
-;; vulkan/generate.rkt。
+;; 库入口：`(require vulkan-gen/main)` 后调用 `generate!`（require 无副作用）。
+;; CLI 入口：`racket vulkan-gen/main.rkt [vk.xml] [out] [feature] [ext] [audit]`。
 ;;
 ;; 流水线：
 ;;   vk-registry     读 XML + feature/extension 闭包
@@ -37,24 +37,31 @@
 (provide generate!)
 
 ;; 默认即仓库提交的绑定配方（no-arg 可复现 generated/）：
-;;   vk-1.4.363.xml -> generated/  VK_VERSION_1_4  common
+;;   registry/vk-1.4.363.xml -> vulkan/generated  VK_VERSION_1_4  common
+;; 审计产物（abi_check.c / unknown-types.txt）单独落在 vulkan-gen/audit/。
 ;; 显式覆盖仍可：feature/extensions 传 #f = 用默认；extensions "" = 只要 core。
-(define-runtime-path vulkan-dir "..")
-(define default-xml (build-path vulkan-dir "registry" "vk-1.4.363.xml"))
-(define default-out (build-path vulkan-dir "generated"))
+(define-runtime-path gen-dir ".")
+(define repo-dir (build-path gen-dir ".."))
+(define default-xml (build-path repo-dir "registry" "vk-1.4.363.xml"))
+(define default-out (build-path repo-dir "vulkan" "generated"))
+(define default-audit (build-path gen-dir "audit"))
 (define default-feature "VK_VERSION_1_4")
 (define default-extensions "common")
 
 (define (generate! #:in-xml [in-xml #f]
                    #:out-dir [out-dir #f]
+                   #:audit-dir [audit-dir #f]
                    #:feature [feature #f]
                    #:extensions [extensions #f])
   (define in-file (or in-xml default-xml))
   (define out-root (or out-dir default-out))
+  (define audit-root (or audit-dir default-audit))
   (define target-feature (or feature default-feature))
   (define target-extensions (or extensions default-extensions))
   (make-directory* out-root)
-  (eprintf "generate: feature=~a extensions=~a -> ~a\n" target-feature target-extensions out-root)
+  (make-directory* audit-root)
+  (eprintf "generate: feature=~a extensions=~a out=~a audit=~a\n"
+           target-feature target-extensions out-root audit-root)
 
   ;; ----------------------------------------------------------------
   ;; 1. 注册表 + 依赖闭包
@@ -126,6 +133,7 @@
   ;; ----------------------------------------------------------------
   ;; 4. 写文件
   (define (out-file name) (build-path out-root name))
+  (define (audit-file name) (build-path audit-root name))
   (define (emit forms path)
     (call-with-output-file path #:exists 'replace
       (λ (o) (for ([f forms]) (write f o) (newline o)))))
@@ -159,11 +167,11 @@
         (display "  return 0;\n}\n" o)))
     (length names))
 
-  (define abi-count (emit-abi-c (out-file "abi_check.c")))
+  (define abi-count (emit-abi-c (audit-file "abi_check.c")))
 
   ;; 未知类型审计：任何退化成 _pointer 的类型都写进报告；strict 模式下报错
   (define unknowns (sort (hash-keys unknown-set) string<?))
-  (call-with-output-file (out-file "unknown-types.txt") #:exists 'replace
+  (call-with-output-file (audit-file "unknown-types.txt") #:exists 'replace
     (λ (o) (for ([n (in-list unknowns)]) (displayln n o))))
   (cond
     [(null? unknowns) (eprintf "unknown types: 0\n")]
@@ -175,3 +183,15 @@
   (eprintf "generated: constants=~a types=~a commands=~a safe=~a api=~a pnext=~a abi=~a -> ~a\n"
            (length constants) (length type-form-list) (length command-form-list)
            (length safe-form-list) (length api-command-list) (length pnext-form-list) abi-count out-root))
+
+;; ------------------------------------------------------------------
+;; CLI 入口（也可当库调用上面的 generate!）
+(module+ main
+  (define args (current-command-line-arguments))
+  ;; 未给的位置参数返回 #f，由 generate! 解析为默认。
+  (define (arg i) (if (> (vector-length args) i) (vector-ref args i) #f))
+  (generate! #:in-xml     (arg 0)
+             #:out-dir    (arg 1)
+             #:feature    (arg 2)
+             #:extensions (arg 3)
+             #:audit-dir  (arg 4)))

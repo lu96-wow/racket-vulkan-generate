@@ -5,7 +5,7 @@
 
 (require rackunit
          racket/list
-         vulkan/generator/classify
+         vulkan-gen/classify
          vulkan/generated/facts)
 
 (define (find-cmd name)

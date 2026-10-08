@@ -5,7 +5,7 @@
 ;; commands.inc 的形式生成在 emit-commands.rkt；本模块只管运行期事实数据。
 ;; ============================================================
 
-(require "../api-facts.rkt")
+(require vulkan/api-facts)
 
 (provide command->datum
          write-facts-module)
@@ -28,7 +28,7 @@
   (call-with-output-file path #:exists 'replace
     (λ (o)
       (display "#lang racket/base\n" o)
-      (display ";; 自动生成（vulkan/generator）：命令/参数事实，供组合层与测试消费。不要手改。\n" o)
+      (display ";; 自动生成（vulkan-gen）：命令/参数事实，供组合层与测试消费。不要手改。\n" o)
       (display "(require vulkan/api-facts)\n" o)
       (display "(provide (all-from-out vulkan/api-facts) vk-command-facts)\n\n" o)
       (display "(define vk-command-facts\n  (list\n" o)

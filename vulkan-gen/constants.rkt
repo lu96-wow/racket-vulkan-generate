@@ -23,21 +23,30 @@
   (cond
     [(regexp-match #px"^0[xX]([0-9a-fA-F]+)$" t) => (λ (m) (string->number (cadr m) 16))]
     [(regexp-match #px"^-?[0-9]+$" t) => (λ (m) (string->number t))]
-    [(regexp-match #px"^~0(ULL|LL|UL|U|L)?(-([0-9]+))?$" t)
+    ;; ~N = 位取反：宽度由后缀定（ULL/LL/UL=64，U/L/无=32）
+    [(regexp-match #px"^~([0-9]+)(ULL|LL|UL|U|L)?$" t)
      => (λ (m)
-          (define suffix (or (cadr m) ""))
+          (define n (string->number (cadr m)))
+          (define suffix (or (caddr m) ""))
           (define bits (if (member suffix '("ULL" "LL" "UL")) 64 32))
-          (define base (mask-of bits))
-          (define sub (if (list-ref m 3) (string->number (list-ref m 3)) 0))
-          (- base sub))]
+          (- (mask-of bits) n))]
     [(regexp-match #px"^([0-9]*\\.?[0-9]+)[fF]$" t) => (λ (m) (string->number (cadr m)))]
+    [else #f]))
+
+;; 字符串字面量（XML 里的 &quot;...&quot;）——扩展名常量，用 bytes 表达。
+(define (parse-c-string s)
+  (define t (string-trim s))
+  (cond
+    [(regexp-match #px"^\"(.*)\"$" t) => (λ (m) (string->bytes/utf-8 (cadr m)))]
     [else #f]))
 
 (define (enumerant->valexpr e ext-number)
   (define alias (attr e 'alias #f))
   (cond
     [alias (string->symbol alias)]
-    [(attr e 'value) (parse-c-int (attr e 'value))]
+    [(attr e 'value)
+     (define s (attr e 'value))
+     (or (parse-c-int s) (parse-c-string s))]
     [(attr e 'bitpos) (arithmetic-shift 1 (string->number (attr e 'bitpos)))]
     [(attr e 'offset)
      (define off (string->number (attr e 'offset)))

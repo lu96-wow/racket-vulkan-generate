@@ -15,13 +15,13 @@
          racket/path
          racket/port
          racket/runtime-path
-         vulkan/generator/vk-registry
-         vulkan/generator/extension-select)
+         vulkan-gen/vk-registry
+         vulkan-gen/extension-select)
 
 (define-runtime-path here ".")
 (define project-root (simplify-path (build-path here "..")))
-(define gen (build-path project-root "vulkan" "generate.rkt"))
-(define reg (build-path project-root "vulkan" "registry" "vk-1.4.363.xml"))
+(define gen (build-path project-root "vulkan-gen" "main.rkt"))
+(define reg (build-path project-root "registry" "vk-1.4.363.xml"))
 (define racket-exe (find-executable-path "racket"))
 
 ;; 1. 参数解析
@@ -38,12 +38,13 @@
 
 ;; 2. 生成 all：成功 + 无未知类型
 (define out (make-temporary-file "vkext-~a" 'directory))
+(define audit (make-temporary-file "vkext-audit-~a" 'directory))
 (define (run-generator ext-arg)
   (parameterize ([current-error-port (open-output-nowhere)])
     (system*/exit-code racket-exe (path->string gen) (path->string reg)
-                       (path->string out) "VK_VERSION_1_4" ext-arg)))
+                       (path->string out) "VK_VERSION_1_4" ext-arg (path->string audit))))
 (check-equal? (run-generator "all") 0 "generator all should exit 0")
-(check-equal? (file->string (build-path out "unknown-types.txt")) ""
+(check-equal? (file->string (build-path audit "unknown-types.txt")) ""
               "all extensions must have no unknown types")
 
 (define types (file->lines (build-path out "types.inc")))
@@ -55,6 +56,13 @@
 (check-true (has? types "(_bits0 _uint32)"))
 (check-true (has? cmds "(define-vk vkCreateSwapchainKHR "))
 (check-true (has? cmds "(define-vk vkCreateAccelerationStructureKHR "))
+
+;; 3b. 常量解析：~N 位取反 + 字符串扩展名
+(define consts (file->lines (build-path out "constants.inc")))
+(check-true (has? consts "(define VK_QUEUE_FAMILY_EXTERNAL 4294967294)"))
+(check-true (has? consts "(define VK_QUEUE_FAMILY_FOREIGN_EXT 4294967293)"))
+(check-true (has? consts "VK_KHR_SURFACE_EXTENSION_NAME #\"VK_KHR_surface\""))
+(check-true (has? consts "VK_EXT_DEBUG_UTILS_EXTENSION_NAME #\"VK_EXT_debug_utils\""))
 
 ;; 4. 不允许退化占位结构体
 (check-equal? (filter (λ (l) (string-contains? l "_dummy")) types) '())

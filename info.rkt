@@ -1,6 +1,9 @@
 #lang info
-;; 多集合包：vulkan/ 是绑定集合（main/manual/unsafe/safe/glfw/generate/generated/registry）。
-;; vulkan/glfw.rkt 与 vulkan/manual.rkt 解耦，可单独 require。
+;; 多集合包：
+;;   vulkan/     运行期绑定（最终目标）
+;;   vulkan-gen/ 生成器（构建期）
+;;   registry/   资源（vk.xml）
+;; 生成器与资源不参与运行期；见 ARCHITECTURE.md §2。
 (define collection 'multi)
 (define deps '("base"))
 (define build-deps '())

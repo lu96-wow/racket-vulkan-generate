@@ -7,7 +7,7 @@
 ;; ============================================================
 
 (require racket/string
-         "../api-facts.rkt")
+         vulkan/api-facts)
 
 (provide (struct-out vk-plan)
          classify-command

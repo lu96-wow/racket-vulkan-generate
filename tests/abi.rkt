@@ -19,7 +19,7 @@
          ffi/unsafe)
 
 (define-runtime-path here ".")
-(define cfile (build-path here ".." "vulkan" "generated" "abi_check.c"))
+(define cfile (build-path here ".." "vulkan-gen" "audit" "abi_check.c"))
 
 (define gcc (find-executable-path "gcc"))
 (define headers? (file-exists? "/usr/include/vulkan/vulkan.h"))

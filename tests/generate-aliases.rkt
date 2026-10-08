@@ -22,8 +22,8 @@
 
 (define-runtime-path here ".")
 (define project-root (simplify-path (build-path here "..")))
-(define gen (build-path project-root "vulkan" "generate.rkt"))
-(define reg (build-path project-root "vulkan" "registry" "vk-1.4.363.xml"))
+(define gen (build-path project-root "vulkan-gen" "main.rkt"))
+(define reg (build-path project-root "registry" "vk-1.4.363.xml"))
 
 ;; 与 README 一致的目标 feature + 扩展
 (define exts
@@ -35,13 +35,14 @@
    ","))
 
 (define out (make-temporary-file "vkgen-~a" 'directory))
+(define audit (make-temporary-file "vkgen-audit-~a" 'directory))
 
 (define (run-generator!)
   (define racket-exe (find-executable-path "racket"))
   (check-true
    (parameterize ([current-error-port (open-output-nowhere)])
      (system* racket-exe (path->string gen) (path->string reg)
-              (path->string out) "VK_VERSION_1_4" exts))
+              (path->string out) "VK_VERSION_1_4" exts (path->string audit)))
    "generator should exit 0"))
 
 (define (generated-lines name)

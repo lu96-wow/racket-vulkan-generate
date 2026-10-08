@@ -7,7 +7,7 @@
 ;; ============================================================
 
 (require racket/list
-         "../api-facts.rkt"
+         vulkan/api-facts
          "classify.rkt")
 
 (provide emit-safe-forms)

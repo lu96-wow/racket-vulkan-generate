@@ -8,7 +8,7 @@
 
 (require racket/list
          racket/string
-         "../api-facts.rkt"
+         vulkan/api-facts
          "xexpr.rkt"
          "vk-registry.rkt"
          "ctype.rkt")
