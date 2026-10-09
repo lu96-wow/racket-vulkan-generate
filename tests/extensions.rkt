@@ -46,6 +46,12 @@
 (check-equal? (run-generator "all") 0 "generator all should exit 0")
 (check-equal? (file->string (build-path audit "unknown-types.txt")) ""
               "all extensions must have no unknown types")
+;; 启发式审计：all 配方也不应有任何 warn（有则说明可疑，需调查）
+(define diag-warns
+  (for/list ([l (in-list (file->lines (build-path audit "diagnostics.txt")))]
+             #:when (or (string-prefix? l "warn\t") (string-prefix? l "error\t")))
+    l))
+(check-equal? diag-warns '() "all extensions must produce no warnings")
 
 (define types (file->lines (build-path out "types.rkt")))
 (define cmds (file->lines (build-path out "commands.rkt")))

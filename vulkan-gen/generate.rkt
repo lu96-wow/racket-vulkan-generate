@@ -83,11 +83,23 @@
 (define (generate-artifacts model #:registry-file registry-file #:diags [diags #f])
   (define types (vk-model-types model))
   (define cmds (vk-model-commands model))
-  ;; 不静默：每条没有干净糖形状的命令都记录为 info（仍保留 raw 命令）
+  ;; 分类审计：skip 记 info；create/allocate 的 info 结构名做交叉检查
   (for ([c (in-list cmds)])
-    (when (eq? (vk-plan-shape (classify-command c)) 'skip)
-      (diagnose! diags 'info 'safe (vk-command-name c)
-                 "no clean sugar shape; raw command only")))
+    (define plan (classify-command c))
+    (define shape (vk-plan-shape plan))
+    (cond
+      [(eq? shape 'skip)
+       (diagnose! diags 'info 'safe (vk-command-name c) "no clean sugar shape; raw command only")]
+      [(memq shape '(make-handle make-handles make-handles-info-count))
+       (define info (vk-plan-input plan))
+       (when info
+         (define base (vk-param-base info))
+         (define want (if (string-prefix? (symbol->string (vk-command-name c)) "vkAllocate")
+                          "AllocateInfo" "CreateInfo"))
+         (unless (string-contains? base want)
+           (diagnose! diags 'warn 'safe (vk-command-name c)
+                      (format "~a input struct ~a does not look like a ~a" shape base want))))]
+      [else (void)]))
   (define safe-forms (filter values (emit-safe-forms cmds)))
   (list
    (make-artifact "constants.rkt"

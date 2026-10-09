@@ -70,6 +70,25 @@
          (define v (attr m 'values #f))
          (and v (string->symbol v)))))
 
+;; 前提交叉检查：有 pNext 的 struct 必须有 sType，且 sType 的 values 必须以
+;; VK_STRUCTURE_TYPE_ 开头（否则 pnext 表要么缺项、要么值错）。
+(define (audit-pnext! reg types diags)
+  (for ([t (in-list types)]
+        #:when (and (eq? (vk-type-category t) 'struct) (not (vk-type-alias t))))
+    (define ty (hash-ref (registry-types-hash reg) (vk-type-name t) #f))
+    (define members (members-of ty))
+    (when (for/or ([m members]) (equal? (member-name m) "pNext"))
+      (define st (for/first ([m members] #:when (equal? (member-name m) "sType")) m))
+      (cond
+        [(not st) (diagnose! diags 'warn 'type (vk-type-name t) "has pNext but no sType member")]
+        [else
+         (define v (attr st 'values #f))
+         ;; 无 values 的 sType 常见于基类（VkBaseIn/OutStructure），不是错误；
+         ;; 只查“有 values 但前缀不对”。
+         (when (and v (not (regexp-match? #px"^VK_STRUCTURE_TYPE_" v)))
+           (diagnose! diags 'warn 'type (vk-type-name t)
+                      (format "sType values ~a does not start with VK_STRUCTURE_TYPE_" v)))]))))
+
 (define (union-member-ctypes reg ty diags)
   (define members (filter member-name (members-of ty)))
   (define cts
@@ -166,6 +185,7 @@
   (define wanted-list (wanted-type-closure reg wanted-types wanted-cmds))
   (define type-names (topo-sort wanted-list (λ (nm) (type-dependencies reg nm))))
   (define types (filter values (map (λ (nm) (parse-type reg nm diags)) type-names)))
+  (audit-pnext! reg types diags)
 
   ;; 交叉检查：两个 struct 不得映射到同一个 sType（同值意味着可链接语义冲突）
   (let ([seen (make-hash)])

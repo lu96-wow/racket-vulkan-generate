@@ -54,8 +54,14 @@
   (for/first ([p (in-list lst)] #:when (handle? p)) p))
 (define (last-handle lst)
   (for/last ([p (in-list lst)] #:when (handle? p)) p))
+;; create-info 的结构体指针；VkAllocationCallbacks 是可选分配器而非 create-info，
+;; 排除掉（否则 vkCreateDeferredOperationKHR 这类“只有 pAllocator”的命令会被当成
+;; make-handle，把分配器当 info）。
 (define (struct-ptr lst)
-  (for/first ([p (in-list lst)] #:when (and (struct? p) (ptr? p))) p))
+  (for/first ([p (in-list lst)]
+              #:when (and (struct? p) (ptr? p)
+                          (not (string=? (vk-param-base p) "VkAllocationCallbacks"))))
+    p))
 
 (define (mk c shape
           #:dispatch [d #f] #:passthrough [args '()] #:output [output #f]

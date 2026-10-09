@@ -93,10 +93,12 @@
 
   ;; unknown-types.txt = 真正降级为 _pointer 的类型（warn/type）；
   ;; 跳过的宏/非绑定类型是 info，只进 diagnostics.txt。
+  ;; 只收“真正降级为 _pointer”的 type warn（sType/bitmask 等可疑项不进此文件）
   (define unknowns (sort (remove-duplicates
                           (for/list ([d (in-list all-diags)]
                                      #:when (and (eq? (vk-diagnostic-domain d) 'type)
-                                                 (eq? (vk-diagnostic-level d) 'warn)))
+                                                 (eq? (vk-diagnostic-level d) 'warn)
+                                                 (string-contains? (vk-diagnostic-reason d) "_pointer")))
                             (format "~a" (vk-diagnostic-entity d))))
                          string<?))
   (write-file/atomic (build-path audit-root "unknown-types.txt")

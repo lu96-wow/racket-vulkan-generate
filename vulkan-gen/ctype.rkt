@@ -72,7 +72,7 @@
 ;; 未知类型审计：ctype-of-type-name 退化成 _pointer 时**通过显式 diags 收集器上报**，
 ;; 状态由调用方（parse）持有并返回——本模块无全局。
 (define (unknown! diags nm reason)
-  (when diags (diagnose! diags 'warn 'type nm reason))
+  (when diags (diagnose! diags 'warn 'type nm (string-append reason "; degraded to _pointer")))
   '_pointer)
 
 (define (ctype-of-type-name reg nm [diags #f])
@@ -84,8 +84,7 @@
      (case (category-of reg (string->symbol nm))
        [(struct union enum bitmask handle funcpointer) (string->symbol (format "_~a" nm))]
        [(basetype) (hash-ref basetype-map nm (λ () (unknown! diags nm "basetype not in basetype-map")))]
-       [else (unknown! diags nm "unhandled type category")])]
-    [else (unknown! diags nm "unknown type; degraded to _pointer")]))
+       [else (unknown! diags nm "unhandled type category")])]    [else (unknown! diags nm "unknown type; degraded to _pointer")]))
 
 ;; ------------------------------------------------------------------
 ;; 成员解析

@@ -524,11 +524,18 @@ vk.xml ─parse──▶ vk-model{constants, enums, structs, other-types, comman
   `VK_DEFINE_HANDLE` = dispatchable，实例/设备级由 handle 的 `parent` 链定
   （`VkInstance`/`VkPhysicalDevice`→instance，其余→device）；首参是**非**
   dispatchable handle 时才可疑（记 warning）。
-- 交叉检查：bitmask 宽度的两个来源（`VkFlags64` / `bitvalues bitwidth`）矛盾、
-  两个 struct 共用同一个 sType，都会记 warning。
+- 交叉检查（均已记 warning，common/all 当前为 0）：bitmask 宽度的两个来源
+  （`VkFlags64` / `bitvalues bitwidth`）矛盾；两个 struct 共用同一个 sType；
+  有 `pNext` 的 struct 缺 `sType`、或 sType `values` 不以 `VK_STRUCTURE_TYPE_` 开头；
+  `vkCreate*`/`vkAllocate*` 的输入结构名不像 `*CreateInfo`/`*AllocateInfo`
+  （靠这条抓到并修了一个真实误分类：`vkCreateDeferredOperationKHR` 只有 `pAllocator`，
+  原先把分配器当 create-info；现 `struct-ptr` 排除 `VkAllocationCallbacks`，降为 skip）。
 - oracle：`tests/dispatch-audit.rkt` 建真实 instance/device（启用本机可用的 common
   扩展 + API 1.4），对全部命令做 GIPA/GDPA 对账：硬不变量「GDPA 可解析 ⇒ device 级」、
   「core + 本机可用扩展的命令在自身层级可解析」。本机不可用的扩展只报告不失败。
+  布局 oracle 仍只到 `sizeof`/`_Alignof`——Racket 不暴露 cstruct 字段偏移，
+  全量 `offsetof` 对账不可行；字段级正确性主要由功能测试（`compute`/`triangle`/
+  `bitfield`）间接锁定。
 
 **1) 分类（纯函数）**：`(classify cmd) -> (values shape plan)`。
 固定枚举的 shape（固定签名匹配，按表顺序先到先得）：
