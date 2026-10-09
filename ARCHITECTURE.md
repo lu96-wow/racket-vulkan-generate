@@ -517,6 +517,19 @@ vk.xml ─parse──▶ vk-model{constants, enums, structs, other-types, comman
 `@@KEY@@` 残留则直接报错。`vk-model` 自足（不含 registry），生成层不再回看 XML。
 由 `tests/gen-pipeline.rkt` 锁定（解析可复现、四类划分、模块 deps、快照逐字节一致）。
 
+**启发式→事实（P0）**：
+- `flat?` 不再看签名里的 `*`，而是看**生成的 ctype**（能捕获 funcpointer 成员/指针数组），
+  与 `define-cstruct` 完全一致（`facts-build` 的 `ctype-has-pointer?`）。
+- `command-level` 不再硬编码 handle 集合，而是从 registry 事实推：
+  `VK_DEFINE_HANDLE` = dispatchable，实例/设备级由 handle 的 `parent` 链定
+  （`VkInstance`/`VkPhysicalDevice`→instance，其余→device）；首参是**非**
+  dispatchable handle 时才可疑（记 warning）。
+- 交叉检查：bitmask 宽度的两个来源（`VkFlags64` / `bitvalues bitwidth`）矛盾、
+  两个 struct 共用同一个 sType，都会记 warning。
+- oracle：`tests/dispatch-audit.rkt` 建真实 instance/device（启用本机可用的 common
+  扩展 + API 1.4），对全部命令做 GIPA/GDPA 对账：硬不变量「GDPA 可解析 ⇒ device 级」、
+  「core + 本机可用扩展的命令在自身层级可解析」。本机不可用的扩展只报告不失败。
+
 **1) 分类（纯函数）**：`(classify cmd) -> (values shape plan)`。
 固定枚举的 shape（固定签名匹配，按表顺序先到先得）：
 
@@ -662,3 +675,5 @@ base/memory **没有模块级可变全局**；需要「默认/共享」的状态
 | N9 ✅ | 资源/生成器/目标分层：`vulkan/generator/`→`vulkan-gen/` 集合、`vulkan/registry/`→`registry/`、审计产物→`vulkan-gen/audit/`、`vulkan/experiments/`→`experiments/`；生成器 CLI 合入 `vulkan-gen/main.rkt`；运行期公共路径不变 | 全部 |
 | N10 ✅ | 资源获取标准化：`fetch-registry.rkt <version>`（Khronos tag → `registry/vk-<version>.xml` + 版本自检 + 原子写入）；`rebuild.rkt` 缺默认 xml 时自动拉取 | 资源 |
 | N11 ✅ | 版本管理基础：包版本 = Vulkan header（`info.rkt` `1.4.363`）；生成 `vulkan/generated/version.rkt`（binding/registry/feature/extensions provenance）；`tests/version.rkt` 锁定一致；不加版本目录 | 全部 |
+| N12 ✅ | 生成器局部化：`vulkan-gen/` 拆为 parse（自足 `vk-model`）+ generate（四类领域）+ module（deps/body/exports）+ template；诊断显式返回（去全局回调）；`.inc` → 真模块 `generated/*.rkt`，运行期 `require` 不再 `include` | 全部 |
+| N13 ✅ | 启发式→事实 + oracle：`flat?` 以 ctype 为准；`command-level` 由 `VK_DEFINE_HANDLE`+`parent` 链推导；bitmask 宽度/sType 交叉检查；`tests/dispatch-audit.rkt` 用真实 loader 对全量命令做 GIPA/GDPA 对账 | generate + tests |

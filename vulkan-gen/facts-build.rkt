@@ -21,12 +21,35 @@
 
 (define skip-commands '("vkGetInstanceProcAddr" "vkGetDeviceProcAddr"))
 
-(define (command-level reg c)
+;; 分派层级由 registry 事实推导：dispatchable handle 的 parent 链决定 instance/device。
+(define (dispatchable-handle? reg base)
+  (define ty (hash-ref (registry-types-hash reg) (string->symbol base) #f))
+  (and ty (eq? (cat-of ty) 'handle)
+       (regexp-match? #px"VK_DEFINE_HANDLE" (xtext ty))))
+
+(define (handle-level reg base)
+  (cond
+    [(equal? base "VkInstance") 'instance]
+    [(equal? base "VkPhysicalDevice") 'instance]
+    [(equal? base "VkDevice") 'device]
+    [else
+     (define ty (hash-ref (registry-types-hash reg) (string->symbol base) #f))
+     (define p (and ty (attr ty 'parent #f)))
+     (cond [(or (not p) (equal? p base)) 'device]
+           [else (handle-level reg p)])]))
+
+;; 命令分派层级：首参是 dispatchable handle 就按 parent 链定级，否则 global；
+;; 首参是**非** dispatchable handle 才可疑（不静默，记 warning）。
+(define (command-level reg c [diags #f])
   (define params (params-of c))
   (define first (and (pair? params) (member-base-name (car params))))
-  (case (and first (string->symbol first))
-    [(VkInstance VkPhysicalDevice) 'instance]
-    [(VkDevice VkQueue VkCommandBuffer VkExternalComputeQueueNV) 'device]
+  (cond
+    [(not first) 'global]
+    [(dispatchable-handle? reg first) (handle-level reg first)]
+    [(eq? (category-of reg (string->symbol first)) 'handle)
+     (diagnose! diags 'warn 'command (command-name c)
+                (format "first param ~a is a non-dispatchable handle; level inferred global" first))
+     'global]
     [else 'global]))
 
 ;; 命令是否返回 VkResult（alias 命令按目标判定）
@@ -43,11 +66,8 @@
   (if proto (cons (member-base-name proto) acc) acc))
 
 ;; ------------------------------------------------------------------
-(define (dispatch-param? p)
-  (and (member (member-base-name p)
-               '("VkInstance" "VkDevice" "VkPhysicalDevice" "VkQueue" "VkCommandBuffer"
-                 "VkExternalComputeQueueNV"))
-       #t))
+(define (dispatch-param? reg p)
+  (dispatchable-handle? reg (member-base-name p)))
 (define (count-param? p)
   (and (equal? (member-base-name p) "uint32_t")
        (regexp-match? #px"Count$" (member-name p))))
@@ -70,7 +90,9 @@
 
 (define (dispatch-base-of reg c)
   (define params (params-of (resolve-command reg c)))
-  (and (pair? params) (dispatch-param? (car params)) (member-base-name (car params))))
+  (and (pair? params)
+       (let ([b (member-base-name (car params))])
+         (and (dispatchable-handle? reg b) b))))
 
 ;; vkAllocate* 的 count 字段名（在 info 结构体里，例如 commandBufferCount）
 (define (allocate-count-field reg c)
@@ -86,8 +108,16 @@
               (let ([m (find-count-field reg (member-base-name info))])
                 (and m (string->symbol (member-name m))))))))
 
-;; struct/union 是否不含指针成员（递归）。缓存由调用方持有（api-commands
-;; 内建一个），不再有模块级全局；键含 registry（types-hash）的 eq-hash-code。
+(define (ctype-has-pointer? ct)
+  (cond
+    [(eq? ct '_pointer) #t]
+    [(and (pair? ct) (eq? (car ct) '_array)) (ctype-has-pointer? (cadr ct))]
+    [(and (pair? ct) (eq? (car ct) '_list-struct)) (ormap ctype-has-pointer? (cdr ct))]
+    [else #f]))
+
+;; struct/union 是否“可整体浅拷贝”（无指针成员，递归）。
+;; 以生成的 ctype 为准（能捕获 funcpointer 成员 / 指针数组这类签名单上看不出的指针），
+;; 不再用签名里的 `*` 正则。缓存由调用方持有（api-commands 内建一个），无模块级全局。
 (define (flat-struct? reg cache base)
   (define key (list base (eq-hash-code (registry-types-hash reg))))
   (hash-ref cache key
@@ -96,8 +126,8 @@
               (define res
                 (and ty
                      (for/and ([m (members-of ty)])
-                       (cond [(pointer-member? m) #f]
-                             [(bitfield-member? m) #t]
+                       (cond [(bitfield-member? m) #t]
+                             [(ctype-has-pointer? (member-ctype-expr reg m)) #f]
                              [else
                               (define b (member-base-name m))
                               (or (not (hash-has-key? (registry-types-hash reg) (string->symbol b)))
@@ -122,7 +152,7 @@
 (define (api-command reg cache c [diags #f])
   (define eff (resolve-command reg c))
   (vk-command (string->symbol (command-name c))
-              (command-level reg eff)
+              (command-level reg eff diags)
               (command-result? reg c)
               (dispatch-base-of reg c)
               (map (λ (p) (api-param reg cache p diags)) (params-of eff))

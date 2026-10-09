@@ -105,7 +105,18 @@
                    (hash-ref platform-ctype (symbol->string nm) #f)))
      (unless b (d! "basetype not in basetype-map/platform-ctype; using _pointer"))
      (vk-type nm 'basetype #f (or b '_pointer) #f #f #f #f #f)]
-    [(eq? raw 'bitmask) (vk-type nm 'bitmask #f (if (bitmask-64? reg ty) '_uint64 '_uint32) #f #f #f #f #f)]
+    [(eq? raw 'bitmask)
+     ;; 宽度有两个来源（类型文本 VkFlags64 / bitvalues bitwidth），矛盾即可疑
+     (define text64? (and (regexp-match? #px"VkFlags64" (xtext ty)) #t))
+     (define bv (attr ty 'bitvalues #f))
+     (define bv64?
+       (and bv (let ([blk (findf (λ (b) (equal? (attr b 'name) bv))
+                                  (registry-enums-blocks reg))])
+                 (and blk (equal? (attr blk 'bitwidth) "64")))))
+     (when (and bv (not (eq? text64? (and bv64? #t))))
+       (d! (format "bitmask width sources disagree: VkFlags64=~a, bitvalues ~a bitwidth=~a"
+                   text64? bv (if bv64? 64 32))))
+     (vk-type nm 'bitmask #f (if (bitmask-64? reg ty) '_uint64 '_uint32) #f #f #f #f #f)]
     [(eq? raw 'enum) (vk-type nm 'enum #f '_int32 #f #f #f #f #f)]
     [(eq? raw 'struct) (vk-type nm 'struct #f #f (struct-layout reg ty diags) #f #f #f (pnext-sType ty))]
     [(eq? raw 'union) (vk-type nm 'union #f #f #f (union-member-ctypes reg ty diags) #f #f #f)]
@@ -135,7 +146,7 @@
             (cond
               [c (define eff (resolve-command reg c))
                  (vk-func (string->symbol (command-name c))
-                          (command-level reg eff)
+                          (command-level reg eff diags)
                           (length (params-of eff))
                           (function-fun reg eff diags))]
               [else #f]))))
@@ -155,6 +166,15 @@
   (define wanted-list (wanted-type-closure reg wanted-types wanted-cmds))
   (define type-names (topo-sort wanted-list (λ (nm) (type-dependencies reg nm))))
   (define types (filter values (map (λ (nm) (parse-type reg nm diags)) type-names)))
+
+  ;; 交叉检查：两个 struct 不得映射到同一个 sType（同值意味着可链接语义冲突）
+  (let ([seen (make-hash)])
+    (for ([t (in-list types)] #:when (vk-type-sType t))
+      (define st (vk-type-sType t))
+      (when (hash-has-key? seen st)
+        (diagnose! diags 'warn 'type (vk-type-name t)
+                   (format "sType ~a also used by ~a" st (hash-ref seen st))))
+      (hash-set! seen st (vk-type-name t))))
 
   (define (effective t) (if (vk-type-alias t) 'alias (vk-type-category t)))
   (define (category-in? t cats) (memq (effective t) cats))

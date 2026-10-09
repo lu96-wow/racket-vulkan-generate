@@ -98,6 +98,7 @@ racket-vulkan/
     module-surface.rkt        # 命名契约（糖/裸命令模块隔离）回归
     gen-shapes.rkt            # classify 全量断言
     gen-pipeline.rkt          # 流水线局部化：解析自足/可复现、四类划分、模块契约、快照
+    dispatch-audit.rkt        # GIPA/GDPA 全量对账：dispatch 层级与真实 loader 一致（需设备）
     safe-output.rkt           # 安全输出糖（单输出 / enumerate）
     safe-input.rkt            # 输入类糖（调用作用域 + 数组）
     abi.rkt                   # C sizeof/alignof ABI 对照
@@ -446,6 +447,7 @@ PLTCOLLECTS="$PWD:" racket tests/memory-arena.rkt     # 内存/所有权单测
 PLTCOLLECTS="$PWD:" racket tests/abi.rkt           # C sizeof/alignof ABI 对照（需 gcc + vulkan 头文件）
 PLTCOLLECTS="$PWD:" racket tests/bitfield.rkt      # bitfield 打包 + 多维数组（需 gcc）
 PLTCOLLECTS="$PWD:" racket tests/extensions.rkt    # common/all 扩展选择 + 未知类型审计
+PLTCOLLECTS="$PWD:" racket tests/dispatch-audit.rkt # GIPA/GDPA 全量对账（需 Vulkan 设备）
 
 # 重新编译 shader（已提交 .spv，一般不需要）
 cd tests/shaders && glslangValidator -V triangle.vert -o triangle.vert.spv \
