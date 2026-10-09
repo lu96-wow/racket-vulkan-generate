@@ -65,12 +65,15 @@
   (define (put! name valexpr)
     (unless (hash-has-key? constant-map name)
       (hash-set! constant-map name valexpr)))
+  ;; 解析失败的 enum 项先记下，最后只对“确实没有任何来源给出值”的才报警
+  ;; （同一常量常在多个 enums 块 / `#define` 里出现，先到先得）。
+  (define unparsable '())
   (define (put-enum! e en)
     (define nm (attr e 'name))
     (when nm
       (define v (enumerant->valexpr e en))
       (cond [v (put! (string->symbol nm) v)]
-            [else (diagnose! diags 'warn 'constant nm "unparsable enum value; dropped")])))
+            [else (set! unparsable (cons nm unparsable))])))
 
   (for ([blk (registry-enums-blocks reg)])
     (for ([e (find-all-by-tag 'enum blk)]) (put-enum! e #f)))
@@ -88,12 +91,17 @@
             [else
              (define v (enumerant->valexpr ch en))
              (cond [v (put! (string->symbol nm) v)]
-                   [else (diagnose! diags 'warn 'constant nm "unparsable extension enum value; dropped")])])))
+                   [else (set! unparsable (cons nm unparsable))])])))
   (for ([nm (hash-keys (registry-types-hash reg))])
     (define ty (hash-ref (registry-types-hash reg) nm))
     (when (eq? (cat-of ty) 'define)
       (define mm (regexp-match #px"#define\\s+\\S+\\s+([0-9]+)\\s*$" (xtext ty)))
       (when mm (put! nm (string->number (cadr mm))))))
+
+  ;; 只对真的没有任何值的常量报警（不静默，也不误报）
+  (for ([nm (in-list unparsable)]
+        #:unless (hash-has-key? constant-map (string->symbol nm)))
+    (diagnose! diags 'warn 'constant nm "enum value unparsable; constant dropped"))
 
   ;; 常量按依赖（alias）排序后输出
   (define emitted (make-hasheqv))

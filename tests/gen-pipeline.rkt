@@ -58,6 +58,11 @@
                 (vk-diagnostic-entity d))
               '()
               "common recipe must not degrade any type to _pointer")
+;; common 配方不应有任何 warn（否则意味着有东西被降级/丢弃）
+(check-equal? (for/list ([d (in-list d1)] #:when (eq? (vk-diagnostic-level d) 'warn))
+                (list (vk-diagnostic-domain d) (vk-diagnostic-entity d)))
+              '()
+              "common recipe must produce no warnings")
 
 ;; ---------------- 3. 生成：四类划分完整 + 拓扑序 ----------------
 (define types (vk-model-types m1))

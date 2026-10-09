@@ -35,27 +35,6 @@ info	type	wl_display	not a bindable type category (#f); skipped
 info	type	xcb_connection_t	not a bindable type category (#f); skipped
 info	type	xcb_visualid_t	not a bindable type category (#f); skipped
 info	type	xcb_window_t	not a bindable type category (#f); skipped
-warn	constant	VK_ATTACHMENT_UNUSED	unparsable enum value; dropped
-warn	constant	VK_SUBPASS_EXTERNAL	unparsable enum value; dropped
-warn	constant	VK_FALSE	unparsable enum value; dropped
-warn	constant	VK_LOD_CLAMP_NONE	unparsable enum value; dropped
-warn	constant	VK_QUEUE_FAMILY_IGNORED	unparsable enum value; dropped
-warn	constant	VK_REMAINING_ARRAY_LAYERS	unparsable enum value; dropped
-warn	constant	VK_REMAINING_MIP_LEVELS	unparsable enum value; dropped
-warn	constant	VK_TRUE	unparsable enum value; dropped
-warn	constant	VK_WHOLE_SIZE	unparsable enum value; dropped
-warn	constant	VK_MAX_MEMORY_TYPES	unparsable enum value; dropped
-warn	constant	VK_MAX_PHYSICAL_DEVICE_NAME_SIZE	unparsable enum value; dropped
-warn	constant	VK_UUID_SIZE	unparsable enum value; dropped
-warn	constant	VK_MAX_EXTENSION_NAME_SIZE	unparsable enum value; dropped
-warn	constant	VK_MAX_DESCRIPTION_SIZE	unparsable enum value; dropped
-warn	constant	VK_MAX_MEMORY_HEAPS	unparsable enum value; dropped
-warn	constant	VK_MAX_DEVICE_GROUP_SIZE	unparsable enum value; dropped
-warn	constant	VK_LUID_SIZE	unparsable enum value; dropped
-warn	constant	VK_QUEUE_FAMILY_EXTERNAL	unparsable enum value; dropped
-warn	constant	VK_MAX_DRIVER_NAME_SIZE	unparsable enum value; dropped
-warn	constant	VK_MAX_DRIVER_INFO_SIZE	unparsable enum value; dropped
-warn	constant	VK_MAX_GLOBAL_PRIORITY_SIZE	unparsable enum value; dropped
 info	safe	vkCmdSetLineWidth	no clean sugar shape; raw command only
 info	safe	vkCmdSetDepthBias	no clean sugar shape; raw command only
 info	safe	vkCmdSetBlendConstants	no clean sugar shape; raw command only
