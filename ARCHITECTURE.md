@@ -293,7 +293,9 @@ memory；`with-vk-call`、`vk-read-handles`、枚举辅助是使用策略，归 
 ### G. 生成
 - **G1**：alias 已解析；**bitfield 已按存储单元打包**成底层整型字段（`_bitsN`），
   并生成掩码/移位访问器（`VkX-<field>` / `set-VkX-<field>!`）；**多维数组保留全部维度**
-  （`float matrix[3][4]` → `(_array _float 3 4)`）。由 `tests/bitfield.rkt` 锁定。
+  （`float matrix[3][4]` → `(_array _float 3 4)`）。由 `tests/bitfield.rkt` 锁定：从 registry
+  提取**全部**位域结构体（当前 7 个），每个都让 Racket 与 gcc 清零后把具名位域置全 1，
+  再 dump 整段字节逐字节比对（等价于验证 offset/宽度/单元划分与 C 一致）。
 - **G2**：未识别类型不再静默：降级为 `_pointer` 的类型写进 `vulkan-gen/audit/unknown-types.txt`，
   全部降级/跳过（含跳过宏、无糖形状）写进 `diagnostics.txt`（领域+实体+原因），
   可用 `VULKAN_GEN_STRICT=1` 把未知类型提升为错误。当前 `common` 与 `all` 均 **0 未知类型**
@@ -533,9 +535,14 @@ vk.xml ─parse──▶ vk-model{constants, enums, structs, other-types, comman
 - oracle：`tests/dispatch-audit.rkt` 建真实 instance/device（启用本机可用的 common
   扩展 + API 1.4），对全部命令做 GIPA/GDPA 对账：硬不变量「GDPA 可解析 ⇒ device 级」、
   「core + 本机可用扩展的命令在自身层级可解析」。本机不可用的扩展只报告不失败。
-  布局 oracle 仍只到 `sizeof`/`_Alignof`——Racket 不暴露 cstruct 字段偏移，
-  全量 `offsetof` 对账不可行；字段级正确性主要由功能测试（`compute`/`triangle`/
-  `bitfield`）间接锁定。
+  布局：字段偏移由 vk.xml 成员顺序 + 平台 C ABI 决定（`define-cstruct` 即按 C ABI），
+  不存在 Vulkan 专属偏移约定；同平台 C 布局是确定的，“编译器≠声明”不是变量，
+  风险只在我们这边（转写/类型宽度/位域）。唯一 implementation-defined 处是 C 位域，
+  而 vk.xml 明确声明位域布局非规范、由 spec 定义；我们的 `_bitsN` 按 XML 给出的
+  规范布局打包（共 27 个位域 / ~8 个结构体，均在 acceleration 类扩展、不在 common），
+  已由 `tests/bitfield.rkt` 对照 gcc（全部 7 个位域结构体，整段字节 dump）；
+  所以全量 `offsetof` 只是生成器自检、非必需；
+  `sizeof`/`_Alignof`（core）+ 位域专项 + 功能测试（`compute`/`triangle`）已足够。
 
 **1) 分类（纯函数）**：`(classify cmd) -> (values shape plan)`。
 固定枚举的 shape（固定签名匹配，按表顺序先到先得）：

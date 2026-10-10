@@ -102,7 +102,7 @@ racket-vulkan/
     safe-output.rkt           # 安全输出糖（单输出 / enumerate）
     safe-input.rkt            # 输入类糖（调用作用域 + 数组）
     abi.rkt                   # C sizeof/alignof ABI 对照
-    bitfield.rkt              # bitfield 存储单元打包 + 多维数组布局回归
+    bitfield.rkt              # 全部位域结构体：存储单元打包 + 多维数组，整段字节 dump 对照 gcc
     extensions.rkt            # 扩展选择（common/all）+ 未知类型/常量解析审计回归
     constants.rkt             # 常量值解析（~N 位取反 + 字符串扩展名）回归
     callback.rkt              # 回调保活（稳定指针 / arena 保活 / 往返调用）

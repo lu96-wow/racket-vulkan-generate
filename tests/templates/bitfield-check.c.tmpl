@@ -1,4 +1,7 @@
 #include <vulkan/vulkan.h>
 #include <stddef.h>
 #include <stdio.h>
-int main(void){printf("%zu %zu %zu\n", sizeof(VkAccelerationStructureInstanceKHR), _Alignof(VkAccelerationStructureInstanceKHR), sizeof(VkTransformMatrixKHR));return 0;}
+#include <string.h>
+int main(void){
+@@CASES@@  return 0;
+}
